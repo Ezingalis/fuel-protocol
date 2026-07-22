@@ -7,6 +7,9 @@
     "directory": "./public",
     "binding": "ASSETS"
   },
+  "routes": [
+    { "pattern": "fuel.ethanzingalis.com", "custom_domain": true }
+  ],
   "vars": {
     "MAIL_FROM": "Fuel Protocol <fuel@ethanzingalis.com>"
   },
