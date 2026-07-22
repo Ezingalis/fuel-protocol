@@ -1,0 +1,26 @@
+{
+  // Fuel Protocol — Cloudflare Worker with static assets
+  "name": "fuel-protocol",
+  "main": "worker.js",
+  "compatibility_date": "2026-07-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "vars": {
+    "MAIL_FROM": "Fuel Protocol <onboarding@resend.dev>",
+    // Shows sign-in links on screen when email isn't configured.
+    // ⚠️ DELETE THIS LINE before anyone else uses the app (see SETUP.md §7).
+    "ALLOW_DEV_LINK": "1"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "fuel-protocol-db",
+      "database_id": "df9facb0-8cb5-4588-9e21-2cb7c2d3ea52"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

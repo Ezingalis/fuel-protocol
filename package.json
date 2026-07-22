@@ -1,0 +1,14 @@
+{
+  "name": "fuel-protocol",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "bash scripts/test.sh",
+    "db:schema": "wrangler d1 execute fuel-protocol-db --remote --file=./schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}
