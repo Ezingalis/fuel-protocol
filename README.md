@@ -11,6 +11,10 @@ A personal nutrition diary — MyFitnessPal-style — built as one HTML file plu
 | `schema.sql` | D1 database tables (users, state, magic links) |
 | `wrangler.jsonc` | Cloudflare config (static assets + D1 binding) |
 | `DEPLOY.md` | Click-by-click deployment guide |
+| `SETUP.md` | Live setup checklist |
+| `tests/` | Structural + integration suites (`npm test`) |
+| `docs/` | Architecture, API, secrets, troubleshooting, development |
+| `scripts/` | `setup.sh`, `deploy.sh`, `test.sh` |
 
 ## Features
 
