@@ -1,9 +1,11 @@
 /* Fuel Protocol — Cloudflare Worker
    Serves the app (static assets from /public) and the food API:
-     GET /api/health              -> { ok, fs }
-     GET /api/search?q=&max=      -> { items: [...] }   FatSecret, falls back to Open Food Facts
-     GET /api/barcode?code=       -> { items: [...] }   Open Food Facts first, then FatSecret
-     GET /api/food?id=            -> { items: [one] }   FatSecret food.get.v2
+     GET  /api/health             -> { ok, fs }
+     GET  /api/search?q=&max=     -> { items: [...] }   FatSecret, falls back to Open Food Facts
+     GET  /api/barcode?code=      -> { items: [...] }   Open Food Facts first, then FatSecret
+     GET  /api/food?id=           -> { items: [one] }   FatSecret food.get.v2
+     POST /api/plan/share         -> { ok, code }       store a meal plan behind an 8-char code (signed-in)
+     GET  /api/plan/shared?code=  -> { plan }           fetch a shared meal plan (signed-in)
    Secrets (set in Cloudflare, never in code): FS_KEY, FS_SECRET
 */
 
@@ -123,6 +125,15 @@ function randomToken() {
   const a = new Uint8Array(32);
   crypto.getRandomValues(a);
   return b64url(a);
+}
+/* share codes: unambiguous letters/digits (no 0/O, 1/I/L) — identifiers, not secrets */
+const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+function shareCode() {
+  const a = new Uint8Array(8);
+  crypto.getRandomValues(a);
+  let s = "";
+  a.forEach(b => { s += CODE_ALPHABET[b % CODE_ALPHABET.length]; });
+  return s;
 }
 async function sha256hex(text) {
   const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -295,6 +306,45 @@ async function authRoute(url, request, env) {
       return json({ ok: true, updatedAt: at });
     }
     return json({ error: "method" }, 405);
+  }
+
+  if (path === "/api/plan/share" && request.method === "POST") {
+    const uid = await readSession(env, request);
+    if (!uid || !db) return json({ error: "signed_out" }, 401);
+    let body = {};
+    try { body = await request.json(); } catch (e) { return json({ error: "bad_body" }, 400); }
+    const plan = body.plan;
+    if (!plan || typeof plan !== "object" || !Array.isArray(plan.days) || !plan.days.length)
+      return json({ error: "bad_plan" }, 400);
+    const clean = { name: String(plan.name || "Shared plan").slice(0, 60), days: plan.days.slice(0, 31) };
+    const text = JSON.stringify(clean);
+    if (text.length > 150_000) return json({ error: "too_large" }, 413);
+    const made = await db.prepare(
+      "SELECT COUNT(*) AS n FROM shared_plans WHERE created_by=?1 AND created_at > ?2"
+    ).bind(uid, Date.now() - 864e5).first();
+    if (made && made.n >= 20) return json({ error: "rate" }, 429);
+    for (let tries = 0; tries < 3; tries++) {
+      const code = shareCode();
+      try {
+        await db.prepare("INSERT INTO shared_plans (code,json,created_by,created_at) VALUES (?1,?2,?3,?4)")
+          .bind(code, text, uid, Date.now()).run();
+        return json({ ok: true, code });
+      } catch (e) { /* code collision — retry with a fresh one */ }
+    }
+    return json({ error: "server_error" }, 500);
+  }
+
+  if (path === "/api/plan/shared") {
+    const uid = await readSession(env, request);
+    if (!uid || !db) return json({ error: "signed_out" }, 401);
+    const code = (url.searchParams.get("code") || "").trim().toUpperCase();
+    if (!/^[A-Z2-9]{8}$/.test(code)) return json({ error: "bad_code" }, 400);
+    const row = await db.prepare("SELECT json FROM shared_plans WHERE code=?1").bind(code).first();
+    if (!row) return json({ error: "not_found" }, 404);
+    let plan = null;
+    try { plan = JSON.parse(row.json); } catch (e) {}
+    if (!plan) return json({ error: "not_found" }, 404);
+    return json({ plan });
   }
   return null;
 }

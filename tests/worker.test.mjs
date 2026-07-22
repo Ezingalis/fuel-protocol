@@ -180,6 +180,51 @@ test("state: unauthenticated access denied", async () => {
   assert.equal((await fetch(`${BASE}/api/state`)).status, 401);
 });
 
+/* ---------- plan sharing ---------- */
+
+let planCode;
+
+test("plan share: create returns an 8-char code", async () => {
+  const r = await fetch(`${BASE}/api/plan/share`, {
+    method: "POST", headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: JSON.stringify({ plan: { name: "Test cut", days: [
+      { name: "Day 1", meals: { bf: [{ id: "a1", name: "Oats", unit: "g", step: 20, base: 60, amt: 60, cal: 230, p: 7.5, c: 40, f: 4 }], lu: [], di: [], sn: [] } }
+    ] } })
+  });
+  const j = await r.json();
+  assert.equal(j.ok, true);
+  assert.match(j.code, /^[A-Z2-9]{8}$/);
+  planCode = j.code;
+});
+
+test("plan share: fetch by code round-trips the plan", async () => {
+  const j = await (await fetch(`${BASE}/api/plan/shared?code=${planCode}`, { headers: { Cookie: cookie } })).json();
+  assert.equal(j.plan.name, "Test cut");
+  assert.equal(j.plan.days.length, 1);
+  assert.equal(j.plan.days[0].meals.bf[0].name, "Oats");
+});
+
+test("plan share: signed-out access denied both directions", async () => {
+  assert.equal((await fetch(`${BASE}/api/plan/shared?code=${planCode}`)).status, 401);
+  const r = await fetch(`${BASE}/api/plan/share`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: "{}"
+  });
+  assert.equal(r.status, 401);
+});
+
+test("plan share: malformed and unknown codes rejected", async () => {
+  assert.equal((await fetch(`${BASE}/api/plan/shared?code=abc`, { headers: { Cookie: cookie } })).status, 400);
+  assert.equal((await fetch(`${BASE}/api/plan/shared?code=ZZZZZZZZ`, { headers: { Cookie: cookie } })).status, 404);
+});
+
+test("plan share: empty plan rejected", async () => {
+  const r = await fetch(`${BASE}/api/plan/share`, {
+    method: "POST", headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: JSON.stringify({ plan: { name: "x", days: [] } })
+  });
+  assert.equal(r.status, 400);
+});
+
 test("logout: clears the cookie", async () => {
   const r = await fetch(`${BASE}/api/auth/logout`, { headers: { Cookie: cookie } });
   assert.equal((await r.json()).ok, true);

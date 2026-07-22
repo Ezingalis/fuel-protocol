@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "fuel-dev",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [".claude/dev.sh"],
+      "port": 8787
+    }
+  ]
+}

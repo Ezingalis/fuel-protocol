@@ -69,6 +69,22 @@ Every source is normalized to one item shape:
   "cal": 0, "p": 0, "c": 0, "f": 0, "src": "fatsecret|off", "fsid": null }
 ```
 
+## Plan sharing
+
+User-created meal plans live inside the diary blob (private by default). Sharing
+copies a snapshot into the `shared_plans` table behind a random 8-character code;
+anyone signed in can import it by code. Imports are sanitized field-by-field
+(fresh ids, coerced numbers, capped sizes) since the payload is another user's
+content. Applied plans tag each diary entry with an application id (`ap`), which
+is what makes "remove this plan's foods from my calendar" possible without
+touching manually logged food.
+
+## Weights
+
+Each diary day stores `weights: [{ t, w }]` — every weigh-in keeps its exact
+timestamp, so a 9 AM and a 10 PM entry coexist. The progress chart plots the
+daily average. (Migrated automatically from the old single `weight` field.)
+
 ## Why D1 (vs. Supabase & friends)
 
 The data model is one blob per user — no relational queries, no realtime, no

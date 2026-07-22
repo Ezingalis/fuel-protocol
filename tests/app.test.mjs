@@ -41,10 +41,21 @@ test("app: uses the v5 storage key (and migrates v4)", () => {
 test("app: calls every worker endpoint it depends on", () => {
   for (const ep of [
     "/api/health", "/api/search", "/api/barcode",
-    "/api/auth/request", "/api/auth/logout", "/api/me", "/api/state"
+    "/api/auth/request", "/api/auth/logout", "/api/me", "/api/state",
+    "/api/plan/share", "/api/plan/shared"
   ]) {
     assert.ok(html.includes(ep), `app never references ${ep}`);
   }
+});
+
+test("app: undo toast wired up", () => {
+  assert.ok(html.includes('id="toast"'), "toast container missing");
+  assert.ok(html.includes('data-act="undo"'), "undo action missing");
+});
+
+test("app: swipe delete is leftward with right-side delete zone", () => {
+  assert.ok(html.includes("dx<-12"), "swipe should activate on leftward drag");
+  assert.match(html, /justify-content:flex-end/, "delete zone should sit on the right");
 });
 
 test("app: only allowed external resource is the zxing barcode lib", () => {
@@ -112,10 +123,18 @@ test("worker: 500s return a generic error, not internals", () => {
 
 /* ---------- schema.sql ---------- */
 
-test("schema: defines the three tables", () => {
-  for (const t of ["users", "state", "magic_links"]) {
+test("schema: defines the four tables", () => {
+  for (const t of ["users", "state", "magic_links", "shared_plans"]) {
     assert.match(schema, new RegExp(`CREATE TABLE IF NOT EXISTS ${t}`), `missing table ${t}`);
   }
+});
+
+test("worker: plan sharing exists and requires a session", () => {
+  assert.ok(worker.includes('"/api/plan/share"'), "share route missing");
+  assert.ok(worker.includes('"/api/plan/shared"'), "shared-fetch route missing");
+  const shareIdx = worker.indexOf('"/api/plan/share"');
+  const block = worker.slice(shareIdx, shareIdx + 400);
+  assert.ok(block.includes("readSession"), "share must check the session");
 });
 
 test("schema: magic_links keyed by token_hash, never raw token", () => {

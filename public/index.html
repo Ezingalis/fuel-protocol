@@ -21,9 +21,11 @@
   --r:18px; --sh:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.05);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0}
-body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  min-height:100vh;padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+/* #app is the ONLY scroller — the body never moves, so the tab bar never moves */
+#app{position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  padding-bottom:calc(96px + env(safe-area-inset-bottom))}
 .wrap{max-width:480px;margin:0 auto;padding:14px 14px 8px}
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;padding:0}
 input,select{font-family:inherit;font-size:16px;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 12px;width:100%}
@@ -108,9 +110,11 @@ input:focus,select:focus{outline:2px solid var(--green);outline-offset:0;border-
 .mealhd .mt{font-weight:800;font-size:15px}
 .mealhd .mcal{font-weight:800;font-size:14px;color:var(--sub)}
 .entry{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 2px;position:relative;background:var(--card);transition:transform .16s ease}
-.swipewrap{position:relative;overflow:hidden}
+.swipewrap{position:relative;overflow:hidden;transition:max-height .2s ease,opacity .2s ease}
 .swipewrap + .swipewrap{border-top:1px solid var(--line2)}
-.swipebg{position:absolute;inset:0;background:var(--badSoft);color:var(--bad);display:flex;align-items:center;padding-left:14px;font-weight:800;font-size:13px;opacity:0;border-radius:10px}
+.swipewrap.gone{opacity:0}
+.swipebg{position:absolute;inset:0;background:var(--badSoft);color:var(--bad);display:flex;align-items:center;justify-content:flex-end;padding-right:16px;font-weight:800;font-size:13px;opacity:0;border-radius:10px;transition:background .15s ease,color .15s ease}
+.swipebg.armed{background:var(--bad);color:#fff}
 .swipewrap.swiping .swipebg{opacity:1}
 .entry .en{font-size:14px;font-weight:600;line-height:1.25}
 .entry .ea{font-size:12px;color:var(--faint)}
@@ -152,6 +156,10 @@ input:focus,select:focus{outline:2px solid var(--green);outline-offset:0;border-
 /* sheets */
 .scrim{position:fixed;inset:0;background:rgba(16,24,40,.44);z-index:60;display:flex;align-items:flex-end;justify-content:center}
 .sheet{width:100%;max-width:480px;background:var(--bg);border-radius:22px 22px 0 0;max-height:90vh;display:flex;flex-direction:column;padding:10px 14px calc(16px + env(safe-area-inset-bottom))}
+.sheet.szhalf{height:62vh}
+.sheet.szfull{height:calc(100vh - 12px)}
+@supports(height:100dvh){.sheet.szfull{height:calc(100dvh - 12px)}}
+.sheet.snap{transition:height .22s ease}
 .grab{width:38px;height:5px;border-radius:3px;background:var(--line);margin:2px auto 10px}
 .shead{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .shead .st{font-size:17px;font-weight:800;letter-spacing:-.01em}
@@ -193,12 +201,28 @@ input:focus,select:focus{outline:2px solid var(--green);outline-offset:0;border-
 .okline{background:var(--greenSoft);color:var(--green2);border-radius:12px;padding:10px 12px;font-size:12.5px;font-weight:700;margin-top:10px}
 .chartcard svg{display:block;width:100%}
 textarea{width:100%;min-height:110px;font-family:ui-monospace,Menlo,monospace;font-size:11px;border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--card);color:var(--ink)}
+/* undo toast */
+#toast{position:fixed;left:50%;transform:translateX(-50%) translateY(16px);bottom:calc(94px + env(safe-area-inset-bottom));
+  background:var(--ink);color:#fff;border-radius:999px;padding:11px 10px 11px 18px;display:flex;align-items:center;gap:10px;
+  font-size:13.5px;font-weight:700;box-shadow:0 8px 24px rgba(16,24,40,.28);opacity:0;pointer-events:none;
+  transition:opacity .2s ease,transform .2s ease;z-index:70;max-width:94vw}
+#toast.show{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0)}
+#toast .tmsg{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:62vw}
+#toast button{color:#7CE3B8;font-weight:800;font-size:13.5px;padding:4px 10px}
+/* plan timeline rows */
+.tl{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:12px 2px;border-top:1px solid var(--line2)}
+.tl:first-of-type{border-top:none}
+.tl .ln{font-weight:700;font-size:14.5px}
+.tl .ls{font-size:12px;color:var(--faint)}
+.tlfood{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;text-align:left;padding:9px 2px 9px 30px;font-size:13.5px;border-top:1px dashed var(--line2)}
+.tlmeal{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;text-align:left;padding:10px 2px 10px 14px;font-weight:700;font-size:13.5px;border-top:1px dashed var(--line2)}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
 <div id="app"></div>
 <div class="tabbar"><div class="in" id="tabbar"></div></div>
+<div id="toast"><span class="tmsg" id="toastmsg"></span><button data-act="undo">Undo</button></div>
 <script>
 "use strict";
 /* API base: same origin (the Worker serves /api/*). Leave "" for Cloudflare. */
@@ -350,7 +374,7 @@ var LS=null; /* set after sign-in: fuelprotocol:v5:<uid> */
 function freshDB(){return{
   profile:{sex:"m",age:34,heightIn:70,weightLb:180,activity:1.55,goalRate:1,calMode:"auto",calCustom:2300,
            macroMode:"g",pT:180,cT:250,fT:65,pP:32,cP:44,fP:24,waterGoal:8},
-  log:{},favs:[],custom:[],recipes:[],plans:[],recents:[],freq:{},updatedAt:0
+  log:{},favs:[],custom:[],recipes:[],plans:[],applies:[],recents:[],freq:{},updatedAt:0
 };}
 var DB=freshDB();
 function normalize(){
@@ -360,7 +384,11 @@ function normalize(){
   if(!DB.profile.macroView)DB.profile.macroView="g";
   if(!DB.updatedAt)DB.updatedAt=0;
   ["log","freq"].forEach(function(k){if(!DB[k])DB[k]={};});
-  ["favs","custom","recipes","plans","recents"].forEach(function(k){if(!DB[k])DB[k]=[];});
+  ["favs","custom","recipes","plans","applies","recents"].forEach(function(k){if(!DB[k])DB[k]=[];});
+  /* v5.1: single daily weight became timestamped weigh-ins */
+  Object.keys(DB.log||{}).forEach(function(ds){var d=DB.log[ds];if(!d)return;
+    if(d.weight!=null&&!(d.weights&&d.weights.length))d.weights=[{t:noonOf(ds),w:d.weight}];
+    if(d.weight!==undefined)delete d.weight;});
 }
 function adopt(o){var f=freshDB();Object.keys(f).forEach(function(k){DB[k]=(o&&o[k]!=null)?o[k]:f[k];});normalize();}
 function loadLocal(){
@@ -487,12 +515,15 @@ function fmtDate(ds){var p=ds.split("-");var d=new Date(+p[0],+p[1]-1,+p[2]);
   var wd=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][d.getDay()];
   var mo=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()];
   return {wd:wd,md:mo+" "+d.getDate()};}
-function day(ds){if(!DB.log[ds])DB.log[ds]={meals:{bf:[],lu:[],di:[],sn:[]},water:0,weight:null};
-  var d=DB.log[ds];if(!d.meals)d.meals={bf:[],lu:[],di:[],sn:[]};return d;}
+function noonOf(ds){var p=ds.split("-");return new Date(+p[0],+p[1]-1,+p[2],12,0,0).getTime();}
+function fmtTime(t){var d=new Date(t),h=d.getHours(),m=String(d.getMinutes()).padStart(2,"0"),ap=h>=12?"PM":"AM";h=h%12;if(!h)h=12;return h+":"+m+" "+ap;}
+function day(ds){if(!DB.log[ds])DB.log[ds]={meals:{bf:[],lu:[],di:[],sn:[]},water:0,weights:[]};
+  var d=DB.log[ds];if(!d.meals)d.meals={bf:[],lu:[],di:[],sn:[]};if(!d.weights)d.weights=[];return d;}
 function scaledE(e){var s=e.amt/e.base;return{cal:e.cal*s,p:e.p*s,c:e.c*s,f:e.f*s};}
 function mealTotal(list){var t={cal:0,p:0,c:0,f:0};(list||[]).forEach(function(e){var m=scaledE(e);t.cal+=m.cal;t.p+=m.p;t.c+=m.c;t.f+=m.f;});return t;}
 function dayTotal(d){var t={cal:0,p:0,c:0,f:0};["bf","lu","di","sn"].forEach(function(m){var mt=mealTotal(d.meals[m]);t.cal+=mt.cal;t.p+=mt.p;t.c+=mt.c;t.f+=mt.f;});return t;}
-function fmtAmt(e){var a=e.amt;if(e.unit==="g")return a+" g";if(e.unit==="x")return a+"\u00d7";return a+" "+e.unit+(a!==1&&"g,oz,tbsp".indexOf(e.unit)<0?"s":"");}
+function fmtAmt(e){var a=e.amt;if(e.unit==="g")return a+" g";if(e.unit==="x")return a+"\u00d7";
+  return a+" "+e.unit+(a!==1&&"g,oz,tbsp".indexOf(e.unit)<0&&!/s$/.test(e.unit)?"s":"");}
 function kcal(n){return Math.ceil(n).toLocaleString();}
 var MEALS={bf:"Breakfast",lu:"Lunch",di:"Dinner",sn:"Snacks"};
 
@@ -535,7 +566,7 @@ function toggleFav(d){var k=foodKey(d);
 function noteUse(d){var k=foodKey(d);DB.freq[k]=(DB.freq[k]||0)+1;
   var clean={name:d.name||d.n,unit:d.unit,step:d.step,base:d.base,cal:d.cal,p:d.p,c:d.c,f:d.f,src:d.src||"lib",fsid:d.fsid||null,brand:d.brand||""};
   DB.recents=DB.recents.filter(function(r){return foodKey(r)!==k;});
-  DB.recents.unshift(clean);if(DB.recents.length>15)DB.recents=DB.recents.slice(0,15);}
+  DB.recents.unshift(clean);if(DB.recents.length>30)DB.recents=DB.recents.slice(0,30);}
 
 /* built-in plan */
 function builtinPlan(){
@@ -552,6 +583,45 @@ function builtinPlan(){
 }
 var BUILTIN=builtinPlan();
 function planTotals(pd){var t={cal:0,p:0,c:0,f:0};["bf","lu","di","sn"].forEach(function(m){var mt=mealTotal(pd.meals[m]);t.cal+=mt.cal;t.p+=mt.p;t.c+=mt.c;t.f+=mt.f;});return t;}
+function planById(pid){return pid==="builtin"?BUILTIN:DB.plans.filter(function(p){return p.id===pid;})[0];}
+function cloneEntry(e){var c=JSON.parse(JSON.stringify(e));c.id=uid();delete c.ap;return c;}
+function planApplies(){if(!DB.applies)DB.applies=[];return DB.applies;}
+/* remove everything a plan application logged — one date, or every date */
+function apRemove(apId,onlyDate){
+  var items=[];
+  (onlyDate?[onlyDate]:Object.keys(DB.log)).forEach(function(ds){var d=DB.log[ds];if(!d||!d.meals)return;
+    ["bf","lu","di","sn"].forEach(function(m){
+      (d.meals[m]||[]).forEach(function(e,i){if(e.ap===apId)items.push({date:ds,meal:m,entry:e,index:i});});
+      d.meals[m]=(d.meals[m]||[]).filter(function(e){return e.ap!==apId;});
+    });});
+  var left=0;Object.keys(DB.log).forEach(function(ds){var d=DB.log[ds];if(!d||!d.meals)return;
+    ["bf","lu","di","sn"].forEach(function(m){(d.meals[m]||[]).forEach(function(e){if(e.ap===apId)left++;});});});
+  if(!left)DB.applies=planApplies().filter(function(a){return a.id!==apId;});
+  return items;
+}
+/* what a plan IS, computed from its actual food */
+function planProfile(pl){
+  var n=pl.days.length||1,s={cal:0,p:0,c:0,f:0};
+  pl.days.forEach(function(pd){var t=planTotals(pd);s.cal+=t.cal;s.p+=t.p;s.c+=t.c;s.f+=t.f;});
+  var avg={cal:Math.round(s.cal/n),p:Math.round(s.p/n),c:Math.round(s.c/n),f:Math.round(s.f/n)};
+  var pctP=avg.cal?Math.round(avg.p*4/avg.cal*100):0,pctC=avg.cal?Math.round(avg.c*4/avg.cal*100):0,pctF=avg.cal?Math.round(avg.f*9/avg.cal*100):0;
+  var tuned=Math.max(5,Math.round(avg.p/0.9/5)*5);
+  var lvl=pctP>=30?"High protein":(pctP>=20?"Moderate protein":"Low protein");
+  var carb=pctC<30?"Lower carb":(pctC>50?"High carb":"Balanced carbs");
+  return{n:n,avg:avg,pctP:pctP,pctC:pctC,pctF:pctF,tuned:tuned,lvl:lvl,carb:carb};
+}
+/* the plan explained in sentences, judged against THIS user's numbers */
+function planReview(pl){
+  var pr=planProfile(pl),td=tdee(),diff=td-pr.avg.cal,me=DB.profile.weightLb,out=[];
+  out.push(pr.n+" day"+(pr.n===1?"":"s")+" · averages "+pr.avg.cal.toLocaleString()+" cal — "+pr.avg.p+" g protein ("+pr.pctP+"%), "+pr.avg.c+" g carbs ("+pr.pctC+"%), "+pr.avg.f+" g fat ("+pr.pctF+"%).");
+  if(diff>150)out.push("For you that’s roughly a "+(Math.round(diff/50)*50).toLocaleString()+" cal/day deficit against your ~"+td.toLocaleString()+" cal maintenance — about "+(Math.round(diff*7/3500*4)/4)+" lb/week of loss.");
+  else if(diff<-150)out.push("For you that runs ~"+Math.abs(Math.round(diff/50)*50).toLocaleString()+" cal/day above your ~"+td.toLocaleString()+" cal maintenance — built for gaining, not cutting.");
+  else out.push("That sits right at your ~"+td.toLocaleString()+" cal maintenance — hold weight while you train.");
+  out.push("Protein is sized for a ~"+pr.tuned+" lb body at 0.9 g/lb"+(me?(Math.abs(pr.tuned-me)<=15?" — a good match for your "+me+" lb.":" (you’re at "+me+" lb — your number would be ~"+Math.round(me*0.9)+" g).")
+    :"."));
+  out.push(pr.lvl+" protects muscle in a deficit · "+pr.carb.toLowerCase()+" (~"+pr.avg.c+" g) fuels training · fat near "+pr.avg.f+" g supports hormones.");
+  return out;
+}
 
 /* ================= SVG bits ================= */
 function ringSVG(eaten,target){
@@ -648,6 +718,15 @@ function renderDiary(){
       '<div class="mbar"><i style="width:'+pc+'%;background:'+color+'"></i></div></div>';};
   h+='<div class="card"><div class="mealhd"><span class="eyebrow">Macros</span><button class="swapbtn" data-act="macroswap" title="Switch grams / percent">\u21c4</button></div>'+
      '<div class="maccols">'+mcol("Carbs",tot.c,T.c,"var(--carb)")+mcol("Fat",tot.f,T.f,"var(--fat)")+mcol("Protein",tot.p,T.p,"var(--prot)")+'</div></div>';
+  /* plan foods on this day \u2014 offer clean removal without touching your own logging */
+  var apHere={};
+  ["bf","lu","di","sn"].forEach(function(m){d.meals[m].forEach(function(e){if(e.ap)apHere[e.ap]=(apHere[e.ap]||0)+1;});});
+  Object.keys(apHere).forEach(function(apid){
+    var rec=(DB.applies||[]).filter(function(a){return a.id===apid;})[0];
+    h+='<div class="trainchip" style="display:flex;align-items:center;justify-content:space-between;gap:10px">'+
+       '<span>\ud83d\udccb '+esc((rec&&rec.name)||"Meal plan")+' \u00b7 '+apHere[apid]+' item'+(apHere[apid]===1?"":"s")+' from plan</span>'+
+       '<button style="font-weight:800;color:var(--green2);text-decoration:underline;flex:0 0 auto" data-act="clearplansheet" data-ap="'+apid+'">Remove\u2026</button></div>';
+  });
   ["bf","lu","di","sn"].forEach(function(m){
     var list=d.meals[m],mt=mealTotal(list);
     h+='<div class="card"><div class="mealhd"><span class="mt">'+MEALS[m]+'</span><span class="mcal num">'+(list.length?kcal(mt.cal)+' cal':'')+'</span></div>';
@@ -666,9 +745,15 @@ function renderDiary(){
   h+='<div class="card"><div class="mealhd"><span class="mt">Water</span><span class="mcal num">'+(d.water||0)+' / '+wg+'</span></div><div class="glasses">';
   for(var i=0;i<wg;i++){h+='<button class="glass'+(i<(d.water||0)?' fill':'')+'" data-act="water" data-i="'+i+'">\u25cf</button>';}
   h+='</div></div>';
-  h+='<div class="card"><div class="mealhd"><span class="mt">Weight</span><span class="mcal num">'+(d.weight?d.weight+' lb logged':'')+'</span></div>'+
-     '<div class="frow" style="margin-top:10px"><div><input id="win" type="number" inputmode="decimal" step="0.1" placeholder="'+(d.weight?d.weight:"Log "+(isToday?"today":"this day"))+' (lb)"></div>'+
-     '<button class="pillbtn" data-act="logweight" style="flex:0 0 auto">Log</button></div></div>';
+  var wts=(d.weights||[]).slice().sort(function(a,b){return a.t-b.t;});
+  h+='<div class="card"><div class="mealhd"><span class="mt">Weight</span><span class="mcal num">'+(wts.length?wts[wts.length-1].w+' lb':'')+'</span></div>';
+  wts.forEach(function(we){
+    h+='<div class="kv"><span class="num" style="color:var(--sub)">'+fmtTime(we.t)+'</span>'+
+       '<span class="row" style="gap:10px"><b class="num">'+we.w+' lb</b>'+
+       '<button class="sx" style="width:26px;height:26px;font-size:11px" data-act="delweight" data-t="'+we.t+'">✕</button></span></div>';});
+  h+='<div class="frow" style="margin-top:10px"><div><input id="win" type="number" inputmode="decimal" step="0.1" placeholder="'+(wts.length?"Add another weigh-in":"Log "+(isToday?"today":"this day"))+' (lb)"></div>'+
+     '<button class="pillbtn" data-act="logweight" style="flex:0 0 auto">Log</button></div>'+
+     (wts.length>1?'<div class="fnote">Every weigh-in keeps its time — the progress chart uses the day’s average.</div>':'')+'</div>';
   h+='<div class="card"><div class="mealhd"><span class="mt">Notes</span></div>'+
      '<input id="daynote" placeholder="How did today feel? Hunger, energy, workout\u2026" value="'+esc(d.note||"")+'" style="margin-top:10px">'+
      '</div>';
@@ -677,16 +762,35 @@ function renderDiary(){
 }
 function renderPlans(){
   var h='<div class="wrap"><div class="top"><span class="h1">Meal plans</span></div>'+
-   '<p class="sub" style="margin:6px 2px 0">Tap any day to preview it, then log the whole day to your diary in one tap.</p>';
+   '<p class="sub" style="margin:6px 2px 0">Tap a plan to read it — what it is, why it works, and every day inside.</p>';
+  /* plans currently applied to the calendar, with clean removal */
+  if((DB.applies||[]).length){
+    h+='<div class="card"><div class="eyebrow">On your calendar</div>';
+    DB.applies.slice(0,4).forEach(function(a){
+      var sf=fmtDate(a.start),ef=fmtDate(dateAdd(a.start,a.days-1));
+      h+='<div class="lrow"><span class="grow"><span class="ln">'+esc(a.name)+'</span><br>'+
+         '<span class="ls">'+sf.md+(a.days>1?' – '+ef.md:'')+' · '+a.days+' day'+(a.days===1?"":"s")+'</span></span>'+
+         '<button class="pillbtn danger" data-act="unapply" data-id="'+a.id+'" style="padding:8px 12px;font-size:12px">Remove</button></div>';});
+    h+='<div class="fnote">Remove takes that plan’s foods off your diary — anything you logged yourself stays.</div></div>';
+  }
   [BUILTIN].concat(DB.plans).forEach(function(pl){
-    h+='<div class="card"><div class="mealhd"><span class="mt">'+esc(pl.name)+'</span>'+
-       (pl.builtin?'<span class="chip grn" style="padding:5px 10px">Built-in</span>':'<button class="pillbtn danger" data-act="delplan" data-id="'+pl.id+'" style="padding:7px 11px;font-size:12px">Delete</button>')+'</div>';
-    h+='<div class="daygrid">';
-    pl.days.forEach(function(pd,i){var t=planTotals(pd);
-      h+='<button class="dg" data-act="openplanday" data-pid="'+pl.id+'" data-i="'+i+'">'+esc(pd.name)+'<b class="num">'+kcal(t.cal)+'</b></button>';});
-    h+='</div><button class="bigbtn ghost" data-act="openapplyplan" data-id="'+pl.id+'">Log full plan ('+pl.days.length+' days) to my diary</button></div>';
+    var pr=planProfile(pl);
+    h+='<button class="card" style="width:100%;display:block;text-align:left" data-act="openplanview" data-id="'+pl.id+'">'+
+      '<div class="mealhd"><span class="mt">'+esc(pl.name)+'</span><span class="mcal num">'+pr.n+' day'+(pr.n===1?"":"s")+'</span></div>'+
+      '<div class="chips" style="margin-top:9px">'+
+        '<span class="chip grn">'+pr.avg.cal.toLocaleString()+' cal/day</span>'+
+        '<span class="chip">'+pr.lvl+'</span>'+
+        '<span class="chip">~'+pr.tuned+' lb</span>'+
+        (pl.builtin?'<span class="chip">Built-in</span>':'')+
+      '</div>'+
+      '<div class="ls" style="margin-top:9px">'+pr.avg.p+'p / '+pr.avg.c+'c / '+pr.avg.f+'f · tap to review</div></button>';
   });
-  h+='<button class="bigbtn ghost" data-act="newplan">Save diary days as a plan</button>';
+  h+='<button class="bigbtn" data-act="planbuild">+ Create a meal plan</button>';
+  h+='<div class="card"><div class="eyebrow">Import a shared plan</div>'+
+     '<div class="frow" style="margin-top:8px"><div><input id="impcode" placeholder="8-character code" autocapitalize="characters" autocomplete="off"></div>'+
+     '<button class="pillbtn ghost" data-act="planimport" style="flex:0 0 auto">Import</button></div>'+
+     (V.planMsg?'<div class="'+(V.planMsg.t==="err"?"warn":"okline")+'">'+esc(V.planMsg.m)+'</div>':'')+
+     '<div class="fnote">Plans you create stay private to your account. Share one from its plan page — friends enter the code here.</div></div>';
   h+='</div>';return h;
 }
 function renderRecipes(){
@@ -713,7 +817,10 @@ function renderProgress(){
   var logged=vals.filter(function(v){return v>0;});
   var avg=logged.length?Math.round(logged.reduce(function(a,b){return a+b;},0)/logged.length):0;
   var protAvg=0;if(logged.length){var ps=0,n=0;days.forEach(function(ds){if(DB.log[ds]){var t=dayTotal(DB.log[ds]);if(t.cal>0){ps+=t.p;n++;}}});protAvg=n?Math.round(ps/n):0;}
-  var wpts=[];Object.keys(DB.log).sort().forEach(function(ds){if(DB.log[ds].weight)wpts.push({d:ds,v:DB.log[ds].weight});});
+  var wpts=[];Object.keys(DB.log).sort().forEach(function(ds){
+    var wl=DB.log[ds]&&DB.log[ds].weights;
+    if(wl&&wl.length){var ws2=0;wl.forEach(function(x){ws2+=x.w;});
+      wpts.push({d:ds,v:Math.round(ws2/wl.length*10)/10});}});
   wpts=wpts.slice(-30);
   var h='<div class="wrap"><div class="top"><span class="h1">Progress</span></div>';
   h+='<div class="card"><div class="sumfoot" style="border:none;margin:0;padding:0">'+
@@ -739,7 +846,9 @@ function renderSettings(){
   h+='<div class="card"><div class="eyebrow">Profile</div>'+
    '<div class="frow"><div><div class="flabel">Sex</div><select data-set="sex"><option value="m"'+(P.sex==="m"?" selected":"")+'>Male</option><option value="f"'+(P.sex==="f"?" selected":"")+'>Female</option></select></div>'+
    '<div><div class="flabel">Age</div><input data-set="age" type="number" inputmode="numeric" value="'+P.age+'"></div></div>'+
-   '<div class="frow"><div><div class="flabel">Height (inches)</div><input data-set="heightIn" type="number" inputmode="numeric" value="'+P.heightIn+'"></div>'+
+   '<div class="frow"><div><div class="flabel">Height</div><div class="row" style="gap:8px">'+
+   '<select id="hft">'+[3,4,5,6,7].map(function(ft){return '<option value="'+ft+'"'+(Math.floor(P.heightIn/12)===ft?" selected":"")+'>'+ft+' ft</option>';}).join("")+'</select>'+
+   '<select id="hin">'+[0,1,2,3,4,5,6,7,8,9,10,11].map(function(nn){return '<option value="'+nn+'"'+(P.heightIn%12===nn?" selected":"")+'>'+nn+' in</option>';}).join("")+'</select></div></div>'+
    '<div><div class="flabel">Weight (lb)</div><input data-set="weightLb" type="number" inputmode="decimal" value="'+P.weightLb+'"></div></div>'+
    '<div class="flabel">Activity level</div><select data-set="activity">'+
    [1.2,1.375,1.55,1.725,1.9].map(function(a){return '<option value="'+a+'"'+(P.activity===a?" selected":"")+'>'+actName(a)+'</option>';}).join("")+'</select></div>';
@@ -794,7 +903,7 @@ function renderSettings(){
   h+='</div>';
   h+='<div class="card"><div class="eyebrow">Water goal</div><div class="flabel">Glasses per day</div><input data-set="waterGoal" type="number" inputmode="numeric" value="'+(P.waterGoal||8)+'"></div>';
   h+='<div class="card"><div class="eyebrow">Food database</div><div class="kv"><span>Online search &amp; barcode</span><b id="apistat">checking\u2026</b></div>'+
-   '<div class="fnote">Searches your library first, then FatSecret; barcodes check Open Food Facts and FatSecret. If FatSecret is unavailable, Open Food Facts keeps everything working.</div></div>';
+   '<div class="fnote">Search shows your saved foods first, then FatSecret; barcodes check Open Food Facts and FatSecret. If FatSecret is unavailable, Open Food Facts keeps everything working.</div></div>';
   h+='<div class="card"><div class="eyebrow">Account</div>'+
    '<div class="kv"><span>Signed in as</span><b>'+esc(AUTH.email||"this device")+'</b></div>'+
    '<div class="kv"><span>Sync</span><b id="syncdot" style="font-weight:600;color:var(--faint)">'+syncLabel()+'</b></div>'+
@@ -809,10 +918,15 @@ function renderSettings(){
 }
 
 /* ---------------- sheets ---------------- */
-function sheetHTML(inner,title){
-  return '<div class="scrim" data-act="scrim"><div class="sheet" data-stop="1"><div class="grab"></div>'+
+function sheetHTML(inner,title,cls){
+  return '<div class="scrim" data-act="scrim"><div class="sheet'+(cls?" "+cls:"")+'" data-stop="1"><div class="grab"></div>'+
    '<div class="shead"><span class="st">'+title+'</span><button class="sx" data-act="sheetclose">\u2715</button></div>'+
    '<div class="sbody">'+inner+'</div></div></div>';
+}
+function sheetSizeClass(){
+  if(!V.sheet)return "";
+  if(V.sheet.kind==="add"||V.sheet.kind==="pbpick")return V.sheet.full?"szfull":"szhalf";
+  return "";
 }
 function srcTag(d){
   if(d.src==="fatsecret")return '<span class="srctag fs">FS</span>';
@@ -830,7 +944,7 @@ function resRow(d,idx){
 function addSheetBody(){
   var sh=V.sheet,q=(sh.query||"").trim(),h="";
   h+='<div class="srchrow"><input id="foodq" type="search" autocomplete="off" placeholder="Search any food\u2026" value="'+esc(sh.query||"")+'">'+
-     '<button class="scan" data-act="scanopen">Scan</button></div>';
+     (q||sh.scanned.length||sh.pick?'<button class="scan" style="background:var(--card);color:var(--sub);border:1px solid var(--line)" data-act="qclear">Clear</button>':'<button class="scan" data-act="scanopen">Scan</button>')+'</div>';
   if(sh.scanning){
     h+='<video id="cam" class="camv" playsinline muted></video>'+
        '<div class="fnote">'+esc(sh.scanMsg||"Point the camera at a barcode.")+'</div>'+
@@ -864,12 +978,18 @@ function addSheetBody(){
   if(sh.scanned.length){h+='<div class="reshd">Scanned</div>';list=sh.scanned;}
   else if(q){
     h+='<div class="reshd">Results</div>';
-    var local=LIB.filter(function(x){return x.q.indexOf(q.toLowerCase())>=0;}).slice(0,8);
-    var mine=DB.custom.filter(function(x){return (x.name||"").toLowerCase().indexOf(q.toLowerCase())>=0;});
-    list=mine.concat(local).concat(sh.apiResults||[]);
-    if(!list.length)h+='<div class="empty">No matches yet'+(sh.apiBusy?" \u2014 searching online\u2026":"")+'. Try a shorter word.</div>';
+    if(sh.apiBusy)h+='<div class="fnote">Searching FatSecret\u2026</div>';
+    /* order: my saved foods first, then FatSecret, then the built-in library */
+    var ql=q.toLowerCase(),seen={},out=[];
+    var take=function(arr){arr.forEach(function(x){var k=foodKey(x);if(!seen[k]){seen[k]=1;out.push(x);}});};
+    take(DB.custom.filter(function(x){return (x.name||"").toLowerCase().indexOf(ql)>=0;}));
+    take(DB.favs.filter(function(x){return (x.name||x.n||"").toLowerCase().indexOf(ql)>=0;}));
+    take(sh.apiResults||[]);
+    take(LIB.filter(function(x){return x.q.indexOf(ql)>=0;}).slice(0,8));
+    list=out;
+    if(!list.length&&!sh.apiBusy)h+='<div class="empty">No matches. Try a shorter word.</div>';
   }
-  else if(sh.seg==="recent"){h+='<div class="reshd">Recent</div>';list=DB.recents;
+  else if(sh.seg==="recent"){h+='<div class="reshd">Recent</div>';list=DB.recents.slice(0,sh.full?30:12);
     if(!list.length)h+='<div class="empty">Foods you log will appear here for one-tap re-adding.</div>';}
   else if(sh.seg==="freq"){h+='<div class="reshd">Most logged</div>';
     list=DB.recents.slice().sort(function(a,b){return (DB.freq[foodKey(b)]||0)-(DB.freq[foodKey(a)]||0);}).slice(0,10);
@@ -953,32 +1073,137 @@ function logRecipeBody(){
    '<button class="bigbtn" data-act="lradd">Log '+n+' serving'+(n===1?"":"s")+'</button></div>';
   return h;
 }
-function newPlanBody(){
-  var sh=V.sheet;
-  var opts=[];for(var i=0;i<10;i++){var ds=dateAdd(todayStr(),-i);
-    if(DB.log[ds]&&dayTotal(DB.log[ds]).cal>0)opts.push(ds);}
-  var h='<div class="flabel">Plan name</div><input id="plname" value="'+esc(sh.name||"")+'" placeholder="e.g. Race week">';
-  h+='<div class="flabel">Pick 1\u20133 logged days to save</div>';
-  if(!opts.length)h+='<div class="empty">No logged days in the last 10 days yet. Log a day first, then save it as a plan.</div>';
-  h+='<div class="chips">'+opts.map(function(ds){var on=sh.sel.indexOf(ds)>=0;var f=fmtDate(ds);
-    return '<button class="chip'+(on?" on":"")+'" data-act="npsel" data-d="'+ds+'">'+f.wd.slice(0,3)+" "+f.md+'</button>';}).join("")+'</div>';
-  h+='<button class="bigbtn" data-act="npsave">Save plan</button>';
+function planViewBody(){
+  var sh=V.sheet,pl=planById(sh.pid);
+  if(!pl)return '<div class="empty">Plan not found.</div>';
+  var h='';
+  planReview(pl).forEach(function(s,i){
+    h+=(i===0?'<div class="okline">':'<div class="fnote" style="margin-top:8px">')+esc(s)+'</div>';});
+  h+='<div class="reshd">Day by day \u2014 tap a day to open it</div>';
+  pl.days.forEach(function(pd,i){
+    var t=planTotals(pd),open=!!sh.open[i];
+    h+='<button class="tl" data-act="pvtoggle" data-i="'+i+'">'+
+       '<span class="grow"><span class="ln">'+esc(pd.name)+'</span><br>'+
+       '<span class="ls num" style="color:var(--green2);font-weight:700">'+Math.round(t.p)+'p \u00b7 '+Math.round(t.c)+'c \u00b7 '+Math.round(t.f)+'f</span></span>'+
+       '<span class="rc num">'+kcal(t.cal)+'</span><span style="color:var(--faint);margin-left:6px">'+(open?'\u25b4':'\u25be')+'</span></button>';
+    if(open){
+      ["bf","lu","di","sn"].forEach(function(m){
+        var L=pd.meals[m]||[];if(!L.length)return;var mt=mealTotal(L);
+        h+='<div class="tlmeal"><span>'+MEALS[m]+'</span><span class="num" style="color:var(--sub)">'+kcal(mt.cal)+' cal</span></div>';
+        L.forEach(function(e){var sm=scaledE(e);
+          h+='<div class="tlfood"><span>'+esc(e.name)+' <span class="ls">'+fmtAmt(e)+'</span></span><b class="num">'+kcal(sm.cal)+'</b></div>';});
+      });
+      h+='<button class="starbtn" style="margin:8px 0 4px" data-act="applyday" data-pid="'+pl.id+'" data-i="'+i+'">Log just this day to '+(V.date===todayStr()?"today":fmtDate(V.date).wd+" "+fmtDate(V.date).md)+'</button>';
+    }
+  });
+  h+='<button class="bigbtn" data-act="pvapply" data-id="'+pl.id+'">Log this plan to my diary\u2026</button>';
+  if(!pl.builtin){
+    if(sh.shareCode)h+='<div class="okline" style="text-align:center">Share code: <b class="num" style="letter-spacing:.14em;font-size:16px">'+esc(sh.shareCode)+'</b><br><span style="font-weight:600">Friends: Plans \u2192 Import \u2192 enter this code.</span></div>';
+    else h+='<button class="bigbtn ghost" data-act="pvshare">'+(sh.shareBusy?"Creating code\u2026":"Share via code")+'</button>';
+    if(sh.shareErr)h+='<div class="warn">'+esc(sh.shareErr)+'</div>';
+    h+='<button class="bigbtn ghost" data-act="pvedit" data-id="'+pl.id+'">Edit in builder</button>';
+    h+='<button class="bigbtn" style="background:var(--badSoft);color:var(--bad)" data-act="pvdelete" data-id="'+pl.id+'">Delete plan</button>';
+  }
   return h;
 }
+function planBuildBody(){
+  var sh=V.sheet,dr=sh.draft;
+  var h='<div class="flabel">Plan name</div><input id="pbname" value="'+esc(dr.name)+'" placeholder="e.g. Race week">';
+  if(!dr.days.length)h+='<div class="empty">Add your first day, then fill it from diary days you\u2019ve already logged \u2014 or drop in recipes.</div>';
+  dr.days.forEach(function(pd,i){
+    var t=planTotals(pd);
+    h+='<div class="card" style="padding:12px"><div class="mealhd"><span class="mt">'+esc(pd.name)+'</span>'+
+       '<span class="row" style="gap:6px"><span class="mcal num">'+kcal(t.cal)+' cal</span>'+
+       '<button class="sx" data-act="pbup" data-day="'+i+'"'+(i===0?' style="opacity:.35"':'')+'>\u2191</button>'+
+       '<button class="sx" data-act="pbdown" data-day="'+i+'"'+(i===dr.days.length-1?' style="opacity:.35"':'')+'>\u2193</button>'+
+       '<button class="sx" data-act="pbdel" data-day="'+i+'">\u2715</button></span></div>';
+    ["bf","lu","di","sn"].forEach(function(m){
+      var L=pd.meals[m]||[];if(!L.length)return;
+      h+='<div class="reshd" style="margin:8px 0 0">'+MEALS[m]+'</div>';
+      L.forEach(function(e){var sm=scaledE(e);
+        h+='<div class="kv"><span>'+esc(e.name)+' <span class="ls">'+fmtAmt(e)+'</span></span>'+
+           '<span class="row" style="gap:8px"><b class="num">'+kcal(sm.cal)+'</b>'+
+           '<button class="sx" style="width:26px;height:26px;font-size:11px" data-act="pbdelfood" data-day="'+i+'" data-m="'+m+'" data-id="'+e.id+'">\u2715</button></span></div>';});
+    });
+    h+='<button class="addbtn" style="width:100%;margin-top:10px" data-act="pbpick" data-day="'+i+'">+ Add foods to '+esc(pd.name)+'</button></div>';
+  });
+  if(sh.err)h+='<div class="warn">'+esc(sh.err)+'</div>';
+  h+='<button class="bigbtn ghost" data-act="pbaddday">+ Add a day</button>';
+  h+='<button class="bigbtn" data-act="pbsave">'+(sh.editingId?"Save changes":"Save plan")+'</button>';
+  h+='<div class="fnote">Plans you build are private to your account. Days renumber automatically when you reorder or remove them.</div>';
+  return h;
+}
+function pbPickBody(){
+  var sh=V.sheet,h='';
+  h+='<div class="chips"><button class="chip'+(sh.seg==="diary"?" on":"")+'" data-act="pbseg" data-v="diary">From my diary</button>'+
+     '<button class="chip'+(sh.seg==="recipes"?" on":"")+'" data-act="pbseg" data-v="recipes">Recipes</button></div>';
+  if(sh.seg==="recipes"){
+    h+='<div class="flabel">Add each recipe to</div><div class="chips">'+
+       ["bf","lu","di","sn"].map(function(m){return '<button class="chip'+(sh.rmeal===m?" on":"")+'" data-act="pbrmeal" data-v="'+m+'">'+MEALS[m]+'</button>';}).join("")+'</div>';
+    if(!DB.recipes.length)h+='<div class="empty">No recipes yet \u2014 build one in the Recipes tab first.</div>';
+    DB.recipes.forEach(function(r){
+      var t=mealTotal(r.items),ps={cal:t.cal/r.servings,p:t.p/r.servings};
+      h+='<button class="res" data-act="pbrecipe" data-id="'+r.id+'"><span class="grow">'+
+         '<span class="rn">'+esc(r.name)+'</span>'+
+         '<span class="rm num">1 serving \u00b7 '+kcal(ps.cal)+' cal \u00b7 '+Math.round(ps.p)+'p</span></span>'+
+         '<span class="rc num">+</span></button>';});
+    if(sh.added)h+='<div class="okline">'+esc(sh.added)+' added \u2014 keep tapping to add more.</div>';
+    h+='<button class="bigbtn" data-act="sheetclose">Done</button>';
+    return h;
+  }
+  /* diary timeline: day header \u2192 expand \u2192 meals + foods, multi-select */
+  var days=[];
+  Object.keys(DB.log).sort().reverse().forEach(function(ds){
+    if(days.length>=21)return;var d=DB.log[ds];
+    if(d&&d.meals&&dayTotal(d).cal>0)days.push(ds);});
+  if(!days.length)h+='<div class="empty">Nothing logged yet \u2014 log a few days, then build plans from them.</div>';
+  var selCount=Object.keys(sh.sel).length;
+  days.forEach(function(ds){
+    var d=DB.log[ds],t=dayTotal(d),f=fmtDate(ds),open=!!sh.open[ds];
+    h+='<button class="tl" data-act="pbdayx" data-d="'+ds+'">'+
+       '<span class="grow"><span class="ln">'+(ds===todayStr()?"Today":f.wd)+' \u00b7 '+f.md+'</span><br>'+
+       '<span class="ls num" style="color:var(--green2);font-weight:700">'+kcal(t.cal)+' cal \u00b7 '+Math.round(t.p)+'p / '+Math.round(t.c)+'c / '+Math.round(t.f)+'f</span></span>'+
+       '<span style="color:var(--faint)">'+(open?'\u25b4':'\u25be')+'</span></button>';
+    if(open){
+      ["bf","lu","di","sn"].forEach(function(m){
+        var L=d.meals[m]||[];if(!L.length)return;
+        var mt=mealTotal(L),mk=ds+"|"+m,mOn=!!sh.sel[mk];
+        h+='<button class="tlmeal" data-act="pbselmeal" data-k="'+mk+'"><span>'+(mOn?'\u2611':'\u2610')+' '+MEALS[m]+'</span>'+
+           '<span class="num" style="color:var(--sub)">'+kcal(mt.cal)+' cal</span></button>';
+        L.forEach(function(e){
+          var fk=mk+"|"+e.id,fOn=mOn||!!sh.sel[fk],sm=scaledE(e);
+          if(mOn)h+='<div class="tlfood" style="opacity:.55"><span>\u2611 '+esc(e.name)+' <span class="ls">'+fmtAmt(e)+'</span></span><b class="num">'+kcal(sm.cal)+'</b></div>';
+          else h+='<button class="tlfood" data-act="pbselfood" data-k="'+fk+'"><span>'+(fOn?'\u2611':'\u2610')+' '+esc(e.name)+' <span class="ls">'+fmtAmt(e)+'</span></span><b class="num">'+kcal(sm.cal)+'</b></button>';});
+      });
+    }
+  });
+  if(selCount)h+='<button class="bigbtn" data-act="pbdone">Add '+selCount+' selection'+(selCount===1?"":"s")+' to Day '+(sh.dayIdx+1)+'</button>';
+  else h+='<div class="fnote" style="text-align:center">Tap a day to open it, then tick whole meals or single foods. They land in the same meal slots.</div>';
+  return h;
+}
+function clearPlanBody(){
+  var sh=V.sheet,rec=(DB.applies||[]).filter(function(a){return a.id===sh.apId;})[0];
+  var f=fmtDate(V.date);
+  return '<div class="fnote">This removes only the foods that came from '+esc((rec&&rec.name)||"the plan")+'. Anything you logged yourself stays. Undo appears for a few seconds after.</div>'+
+   '<button class="bigbtn ghost" data-act="clearday">Remove from '+(V.date===todayStr()?"today":f.wd+" "+f.md)+' only</button>'+
+   (rec&&rec.days>1?'<button class="bigbtn" style="background:var(--badSoft);color:var(--bad)" data-act="clearall">Remove from all '+rec.days+' plan days</button>':
+    '<button class="bigbtn" style="background:var(--badSoft);color:var(--bad)" data-act="clearall">Remove everywhere</button>');
+}
 function applyPlanBody(){
-  var sh=V.sheet,pl=sh.pid==="builtin"?BUILTIN:DB.plans.filter(function(p){return p.id===sh.pid;})[0];
+  var sh=V.sheet,pl=planById(sh.pid);
   if(!pl)return "";
-  var f=fmtDate(sh.start);
+  var pr=planProfile(pl),f=fmtDate(sh.start),ef=fmtDate(dateAdd(sh.start,pl.days.length-1));
   var h='<div class="flabel">Start date (day 1 lands here)</div>'+
    '<div class="datenav" style="margin-top:4px"><button class="dn" data-act="apprev">\u2039</button>'+
    '<div class="dt">'+(sh.start===todayStr()?"Today":f.wd)+'<span class="sm">'+f.md+'</span></div>'+
    '<button class="dn" data-act="apnext">\u203a</button></div>';
-  h+='<div class="reshd">What gets logged</div>';
-  pl.days.forEach(function(pd,i){var ds=dateAdd(sh.start,i),df=fmtDate(ds),t=planTotals(pd);
-    h+='<div class="kv"><span>'+esc(pd.name)+' \u2192 '+df.wd.slice(0,3)+' '+df.md+'</span><b class="num">'+kcal(t.cal)+' cal</b></div>';});
+  h+='<div class="okline num">'+pl.days.length+' days \u00b7 avg '+pr.avg.cal.toLocaleString()+' cal/day \u00b7 ends '+ef.wd.slice(0,3)+' '+ef.md+'</div>';
   var clash=0;pl.days.forEach(function(pd,i){var ds=dateAdd(sh.start,i);
     if(DB.log[ds]&&dayTotal(DB.log[ds]).cal>0)clash++;});
-  if(clash)h+='<div class="warn">'+clash+' of those days already have food logged \u2014 the plan adds on top; remove anything you don\u2019t want after.</div>';
+  if(clash)h+='<div class="warn">'+clash+' of those days already have food logged \u2014 the plan adds on top. You can remove the plan\u2019s foods cleanly afterwards (Plans \u2192 On your calendar \u2192 Remove).</div>';
+  h+='<button class="starbtn" data-act="aplist">'+(sh.showList?"Hide":"Show")+' the day-by-day mapping</button>';
+  if(sh.showList)pl.days.forEach(function(pd,i){var ds=dateAdd(sh.start,i),df=fmtDate(ds),t=planTotals(pd);
+    h+='<div class="kv"><span>'+esc(pd.name)+' \u2192 '+df.wd.slice(0,3)+' '+df.md+'</span><b class="num">'+kcal(t.cal)+' cal</b></div>';});
   h+='<button class="bigbtn" data-act="apgo">Log all '+pl.days.length+' days</button>';
   return h;
 }
@@ -1016,22 +1241,12 @@ function copyBody(){
   if(srcList.length)h+='<button class="bigbtn" data-act="cpgo">Copy '+srcList.length+' item'+(srcList.length===1?"":"s")+' ('+kcal(t.cal)+' cal) to '+MEALS[sh.target]+'</button>';
   return h;
 }
-function planDayBody(){
-  var sh=V.sheet,pl=sh.pid==="builtin"?BUILTIN:DB.plans.filter(function(p){return p.id===sh.pid;})[0];
-  if(!pl)return "";
-  var pd=pl.days[sh.i],t=planTotals(pd);
-  var h='<div class="okline num">'+kcal(t.cal)+' cal \u00b7 '+Math.round(t.p)+'p \u00b7 '+Math.round(t.c)+'c \u00b7 '+Math.round(t.f)+'f for the full day</div>';
-  ["bf","lu","di","sn"].forEach(function(m){
-    if(!pd.meals[m]||!pd.meals[m].length)return;
-    h+='<div class="reshd">'+MEALS[m]+'</div>';
-    pd.meals[m].forEach(function(e){var sm=scaledE(e);
-      h+='<div class="res"><span class="grow"><span class="rn">'+esc(e.name)+'</span>'+
-       '<span class="rm num">'+fmtAmt(e)+'</span></span><span class="rc num">'+kcal(sm.cal)+'</span></div>';});
-  });
-  var f=fmtDate(V.date);
-  h+='<button class="bigbtn" data-act="applyday">Log this day to '+(V.date===todayStr()?"today":f.wd+" "+f.md)+'</button>'+
-     '<div class="fnote">Adds every item to your diary \u2014 you can adjust or remove anything after.</div>';
-  return h;
+function sheetBody(){
+  var k=V.sheet.kind;
+  return k==="add"?addSheetBody():k==="entry"?entrySheetBody():k==="recipe"?recipeSheetBody():
+    k==="logrecipe"?logRecipeBody():k==="applyplan"?applyPlanBody():k==="cal"?calBody():
+    k==="copy"?copyBody():k==="planview"?planViewBody():k==="planbuild"?planBuildBody():
+    k==="pbpick"?pbPickBody():k==="clearplan"?clearPlanBody():"";
 }
 
 /* -------------- main render -------------- */
@@ -1050,9 +1265,9 @@ function render(){
     var am=document.getElementById("authmail");if(am&&AUTH.err)am.focus();return;}
   var h=V.tab==="diary"?renderDiary():V.tab==="plans"?renderPlans():V.tab==="recipes"?renderRecipes():V.tab==="progress"?renderProgress():renderSettings();
   if(V.sheet){
-    var titles={add:"Add to "+(V.sheet.target?MEALS[V.sheet.target.meal]||"recipe":""),entry:"Edit food",recipe:(V.sheet.editingId?"Edit recipe":"New recipe"),logrecipe:"Log recipe",newplan:"New plan",planday:(V.sheet.pdname||"Plan day"),applyplan:"Log full plan",cal:"Jump to a date",copy:"Copy a meal"};
-    var body=V.sheet.kind==="add"?addSheetBody():V.sheet.kind==="entry"?entrySheetBody():V.sheet.kind==="recipe"?recipeSheetBody():V.sheet.kind==="logrecipe"?logRecipeBody():V.sheet.kind==="newplan"?newPlanBody():V.sheet.kind==="applyplan"?applyPlanBody():V.sheet.kind==="cal"?calBody():V.sheet.kind==="copy"?copyBody():planDayBody();
-    h+=sheetHTML(body,titles[V.sheet.kind]||"");
+    var titles={add:"Add to "+(V.sheet.target?MEALS[V.sheet.target.meal]||"recipe":""),entry:"Edit food",recipe:(V.sheet.editingId?"Edit recipe":"New recipe"),logrecipe:"Log recipe",applyplan:"Log full plan",cal:"Jump to a date",copy:"Copy a meal",
+      planview:(planById(V.sheet.pid)||{}).name||"Plan",planbuild:(V.sheet.editingId?"Edit plan":"Create a meal plan"),pbpick:"Add to Day "+((V.sheet.dayIdx||0)+1),clearplan:"Remove plan foods"};
+    h+=sheetHTML(sheetBody(),titles[V.sheet.kind]||"",sheetSizeClass());
   }
   el.innerHTML=h;
   var tb=[["diary","Diary"],["plans","Plans"],["recipes","Recipes"],["progress","Progress"],["settings","Settings"]];
@@ -1067,7 +1282,7 @@ function render(){
 function rerenderSheet(){
   var sb=document.querySelector(".sbody");
   if(!sb)return render();
-  sb.innerHTML=V.sheet.kind==="add"?addSheetBody():V.sheet.kind==="entry"?entrySheetBody():V.sheet.kind==="recipe"?recipeSheetBody():V.sheet.kind==="logrecipe"?logRecipeBody():V.sheet.kind==="newplan"?newPlanBody():V.sheet.kind==="applyplan"?applyPlanBody():V.sheet.kind==="cal"?calBody():V.sheet.kind==="copy"?copyBody():planDayBody();
+  sb.innerHTML=sheetBody();
   if(V.sheet.kind==="add"&&V.sheet.scanning)setTimeout(bindScan,60);
 }
 
@@ -1117,7 +1332,7 @@ function onBarcode(code){
 }
 
 /* -------------- event wiring -------------- */
-function openAdd(target){V.sheet={kind:"add",target:target,query:"",seg:"recent",apiResults:[],scanned:[],cands:[],pick:null,scanning:false,scanMsg:"",focus:false};render();}
+function openAdd(target){V.sheet={kind:"add",target:target,query:"",seg:"recent",apiResults:[],scanned:[],cands:[],pick:null,scanning:false,scanMsg:"",focus:false,full:false};render();}
 function commitAdd(def,amt){
   var sh=V.sheet;noteUse(def);
   var e=defToEntry(def,amt);
@@ -1143,6 +1358,9 @@ document.addEventListener("input",function(ev){
   }
 });
 document.addEventListener("change",function(ev){
+  if(ev.target.id==="hft"||ev.target.id==="hin"){
+    var hf=parseInt((document.getElementById("hft")||{}).value,10)||5,hi2=parseInt((document.getElementById("hin")||{}).value,10)||0;
+    DB.profile.heightIn=hf*12+hi2;save();render();return;}
   if(ev.target.id==="daynote"){day(V.date).note=ev.target.value;save();return;}
   var bi=ev.target.getAttribute&&ev.target.getAttribute("data-burn");
   if(bi!=null){var bn=parseFloat(ev.target.value);
@@ -1167,7 +1385,11 @@ document.addEventListener("click",function(ev){
       DB=freshDB();LS=null;V={tab:"diary",date:todayStr(),sheet:null};render();});
     return;}
   /* nav + diary */
-  if(act==="nav"){V.tab=el.getAttribute("data-v");V.sheet=null;render();}
+  if(act==="nav"){V.tab=el.getAttribute("data-v");V.sheet=null;render();var apEl=document.getElementById("app");if(apEl)apEl.scrollTop=0;}
+  else if(act==="undo"){
+    if(UNDO.items){UNDO.items.forEach(function(it){var L=day(it.date).meals[it.meal];L.splice(Math.min(it.index,L.length),0,it.entry);});
+      if(UNDO.rec&&!(DB.applies||[]).some(function(a){return a.id===UNDO.rec.id;}))planApplies().unshift(UNDO.rec);
+      save();hideUndo();render();}}
   else if(act==="dateprev"){V.date=dateAdd(V.date,-1);render();}
   else if(act==="datenext"){V.date=dateAdd(V.date,1);render();}
   else if(act==="datetoday"){V.date=todayStr();render();}
@@ -1204,12 +1426,12 @@ document.addEventListener("click",function(ev){
   /* sheets generic */
   else if(act==="sheetclose"||act==="scrim"){
     if(act==="scrim"&&ev.target.closest("[data-stop]"))return;
-    stopZX();
-    if(V.sheet&&V.sheet.kind==="add"&&V.sheet.back){V.sheet=V.sheet.back;render();return;}
-    V.sheet=null;render();
+    stopZX();closeSheet();
   }
   /* add sheet */
   else if(act==="seg"){V.sheet.seg=el.getAttribute("data-v");rerenderSheet();}
+  else if(act==="qclear"){V.sheet.query="";V.sheet.apiResults=[];V.sheet.scanned=[];V.sheet.pick=null;V.sheet.scanMsg="";rerenderSheet();}
+  else if(act==="scanback"){V.sheet.scanned=[];V.sheet.scanMsg="";rerenderSheet();}
   else if(act==="scanopen"){V.sheet.scanning=true;V.sheet.scanMsg="";rerenderSheet();}
   else if(act==="scanstop"){stopZX();V.sheet.scanning=false;rerenderSheet();}
   else if(act==="bclookup"){var b=document.getElementById("bcode");if(b&&b.value.trim()){stopZX();V.sheet.scanning=false;onBarcode(b.value.trim());}}
@@ -1245,8 +1467,11 @@ document.addEventListener("click",function(ev){
     e2.amt=Math.max(e2.step,Math.round(nv2*100)/100);save();rerenderSheet();}
   else if(act==="entfav"){toggleFav(V.sheet.entry);rerenderSheet();}
   else if(act==="entdel"){
-    var dd=day(V.date);dd.meals[V.sheet.meal]=dd.meals[V.sheet.meal].filter(function(x){return x.id!==V.sheet.entry.id;});
-    save();V.sheet=null;render();}
+    var dd=day(V.date),dm=V.sheet.meal,de=V.sheet.entry,di3=-1;
+    dd.meals[dm].forEach(function(x,i){if(x.id===de.id)di3=i;});
+    dd.meals[dm]=dd.meals[dm].filter(function(x){return x.id!==de.id;});
+    save();V.sheet=null;render();
+    showUndo("Removed "+de.name,[{date:V.date,meal:dm,entry:de,index:di3<0?0:di3}]);}
   /* recipes */
   else if(act==="newrecipe"){V.sheet={kind:"recipe",draft:{id:uid(),name:"",servings:4,items:[]},editingId:null};render();}
   else if(act==="editrecipe"){var rr=DB.recipes.filter(function(x){return x.id===el.getAttribute("data-id");})[0];
@@ -1272,47 +1497,111 @@ document.addEventListener("click",function(ev){
       cal:t3.cal/r3.servings,p:t3.p/r3.servings,c:t3.c/r3.servings,f:t3.f/r3.servings,src:"recipe",fsid:null};
     day(V.date).meals[V.sheet.meal].push(e3);save();V.sheet=null;V.tab="diary";render();}
   /* plans */
-  else if(act==="openplanday"){var pid=el.getAttribute("data-pid"),i2=parseInt(el.getAttribute("data-i"),10);
-    var pl=pid==="builtin"?BUILTIN:DB.plans.filter(function(p){return p.id===pid;})[0];
-    V.sheet={kind:"planday",pid:pid,i:i2,pdname:pl?pl.days[i2].name:""};render();}
+  else if(act==="openplanview"){V.sheet={kind:"planview",pid:el.getAttribute("data-id"),open:{},shareCode:"",shareErr:"",shareBusy:false};render();}
+  else if(act==="pvtoggle"){var ti=parseInt(el.getAttribute("data-i"),10);V.sheet.open[ti]=!V.sheet.open[ti];rerenderSheet();}
+  else if(act==="pvapply"){V.sheet={kind:"applyplan",pid:el.getAttribute("data-id"),start:todayStr(),showList:false};render();}
+  else if(act==="pvdelete"){DB.plans=DB.plans.filter(function(p){return p.id!==el.getAttribute("data-id");});save();V.sheet=null;render();}
+  else if(act==="pvedit"){var ep=planById(el.getAttribute("data-id"));
+    if(ep&&!ep.builtin){V.sheet={kind:"planbuild",draft:JSON.parse(JSON.stringify(ep)),editingId:ep.id,err:""};render();}}
+  else if(act==="pvshare"){pvShare();}
   else if(act==="applyday"){
-    var pl2=V.sheet.pid==="builtin"?BUILTIN:DB.plans.filter(function(p){return p.id===V.sheet.pid;})[0];
-    if(pl2){var pd=pl2.days[V.sheet.i];
+    var pidA=el.getAttribute("data-pid")||(V.sheet&&V.sheet.pid);
+    var iA=el.getAttribute("data-i")!=null?parseInt(el.getAttribute("data-i"),10):(V.sheet&&V.sheet.i);
+    var pl2=planById(pidA);
+    if(pl2&&pl2.days[iA]){var pd=pl2.days[iA],apd=uid();
       ["bf","lu","di","sn"].forEach(function(m2){(pd.meals[m2]||[]).forEach(function(e4){
-        var c4=JSON.parse(JSON.stringify(e4));c4.id=uid();day(V.date).meals[m2].push(c4);});});
+        var c4=cloneEntry(e4);c4.ap=apd;day(V.date).meals[m2].push(c4);});});
+      planApplies().unshift({id:apd,pid:pl2.id,name:pl2.name+" · "+pd.name,start:V.date,days:1,at:Date.now()});
+      if(DB.applies.length>20)DB.applies.length=20;
       save();}
     V.sheet=null;V.tab="diary";render();}
-  else if(act==="delplan"){DB.plans=DB.plans.filter(function(p){return p.id!==el.getAttribute("data-id");});save();render();}
   else if(act==="wkday"){V.date=el.getAttribute("data-d");render();}
-  else if(act==="openapplyplan"){V.sheet={kind:"applyplan",pid:el.getAttribute("data-id"),start:todayStr()};render();}
   else if(act==="apprev"){V.sheet.start=dateAdd(V.sheet.start,-1);rerenderSheet();}
   else if(act==="apnext"){V.sheet.start=dateAdd(V.sheet.start,1);rerenderSheet();}
+  else if(act==="aplist"){V.sheet.showList=!V.sheet.showList;rerenderSheet();}
   else if(act==="apgo"){
-    var apl=V.sheet.pid==="builtin"?BUILTIN:DB.plans.filter(function(p){return p.id===V.sheet.pid;})[0];
-    if(apl){apl.days.forEach(function(pd,i){var ds=dateAdd(V.sheet.start,i);
-      ["bf","lu","di","sn"].forEach(function(m2){(pd.meals[m2]||[]).forEach(function(e4){
-        var c4=JSON.parse(JSON.stringify(e4));c4.id=uid();day(ds).meals[m2].push(c4);});});});
+    var apl=planById(V.sheet.pid);
+    if(apl){var apId=uid();
+      apl.days.forEach(function(pd,i){var ds=dateAdd(V.sheet.start,i);
+        ["bf","lu","di","sn"].forEach(function(m2){(pd.meals[m2]||[]).forEach(function(e4){
+          var c4=cloneEntry(e4);c4.ap=apId;day(ds).meals[m2].push(c4);});});});
+      planApplies().unshift({id:apId,pid:apl.id,name:apl.name,start:V.sheet.start,days:apl.days.length,at:Date.now()});
+      if(DB.applies.length>20)DB.applies.length=20;
       save();}
     V.date=V.sheet.start;V.sheet=null;V.tab="diary";render();}
-  else if(act==="newplan"){V.sheet={kind:"newplan",name:"",sel:[]};render();}
-  else if(act==="npsel"){var ds2=el.getAttribute("data-d");
-    var nm2=document.getElementById("plname");if(nm2)V.sheet.name=nm2.value;
-    var ix=V.sheet.sel.indexOf(ds2);
-    if(ix>=0)V.sheet.sel.splice(ix,1);else if(V.sheet.sel.length<3)V.sheet.sel.push(ds2);
+  else if(act==="unapply"){
+    var urec=(DB.applies||[]).filter(function(a){return a.id===el.getAttribute("data-id");})[0];
+    var uitems=apRemove(el.getAttribute("data-id"),null);
+    save();render();
+    if(uitems.length)showUndo("Removed "+uitems.length+" plan item"+(uitems.length===1?"":"s"),uitems,urec);}
+  else if(act==="clearplansheet"){V.sheet={kind:"clearplan",apId:el.getAttribute("data-ap")};render();}
+  else if(act==="clearday"||act==="clearall"){
+    var crec=(DB.applies||[]).filter(function(a){return a.id===V.sheet.apId;})[0];
+    var citems=apRemove(V.sheet.apId,act==="clearday"?V.date:null);
+    save();V.sheet=null;render();
+    if(citems.length)showUndo("Removed "+citems.length+" plan item"+(citems.length===1?"":"s"),citems,crec);}
+  /* plan builder */
+  else if(act==="planbuild"){V.sheet={kind:"planbuild",draft:{id:uid(),name:"",days:[]},editingId:null,err:""};render();}
+  else if(act==="pbaddday"){syncPBName();V.sheet.draft.days.push({name:"Day "+(V.sheet.draft.days.length+1),meals:{bf:[],lu:[],di:[],sn:[]}});rerenderSheet();}
+  else if(act==="pbdel"){syncPBName();V.sheet.draft.days.splice(parseInt(el.getAttribute("data-day"),10),1);pbRenumber();rerenderSheet();}
+  else if(act==="pbup"||act==="pbdown"){syncPBName();
+    var bi2=parseInt(el.getAttribute("data-day"),10),bj=act==="pbup"?bi2-1:bi2+1,bd=V.sheet.draft.days;
+    if(bj>=0&&bj<bd.length){var tmp=bd[bi2];bd[bi2]=bd[bj];bd[bj]=tmp;pbRenumber();rerenderSheet();}}
+  else if(act==="pbdelfood"){syncPBName();
+    var pdx=V.sheet.draft.days[parseInt(el.getAttribute("data-day"),10)],pm=el.getAttribute("data-m");
+    if(pdx)pdx.meals[pm]=(pdx.meals[pm]||[]).filter(function(x){return x.id!==el.getAttribute("data-id");});
     rerenderSheet();}
-  else if(act==="npsave"){
-    var nm3=((document.getElementById("plname")||{}).value||"").trim()||"My plan";
-    if(!V.sheet.sel.length)return;
-    var daysArr=V.sheet.sel.sort().map(function(ds3,ix2){var d5=DB.log[ds3];
-      return{name:"Day "+(ix2+1),meals:JSON.parse(JSON.stringify(d5.meals))};});
-    DB.plans.unshift({id:uid(),name:nm3,days:daysArr});
+  else if(act==="pbpick"){syncPBName();
+    V.sheet={kind:"pbpick",back:V.sheet,dayIdx:parseInt(el.getAttribute("data-day"),10),seg:"diary",open:{},sel:{},rmeal:"di",added:"",full:true};render();}
+  else if(act==="pbseg"){V.sheet.seg=el.getAttribute("data-v");rerenderSheet();}
+  else if(act==="pbrmeal"){V.sheet.rmeal=el.getAttribute("data-v");rerenderSheet();}
+  else if(act==="pbdayx"){var dk=el.getAttribute("data-d");V.sheet.open[dk]=!V.sheet.open[dk];rerenderSheet();}
+  else if(act==="pbselmeal"){var mk2=el.getAttribute("data-k");
+    if(V.sheet.sel[mk2])delete V.sheet.sel[mk2];
+    else{V.sheet.sel[mk2]=1;
+      Object.keys(V.sheet.sel).forEach(function(k){if(k.indexOf(mk2+"|")===0)delete V.sheet.sel[k];});}
+    rerenderSheet();}
+  else if(act==="pbselfood"){var fk2=el.getAttribute("data-k");
+    if(V.sheet.sel[fk2])delete V.sheet.sel[fk2];else V.sheet.sel[fk2]=1;
+    rerenderSheet();}
+  else if(act==="pbrecipe"){
+    var pr2=DB.recipes.filter(function(x){return x.id===el.getAttribute("data-id");})[0];
+    if(pr2){var pt2=mealTotal(pr2.items),dst0=V.sheet.back.draft.days[V.sheet.dayIdx];
+      if(dst0){dst0.meals[V.sheet.rmeal].push({id:uid(),name:pr2.name,unit:"serving",step:0.5,base:1,amt:1,
+        cal:pt2.cal/pr2.servings,p:pt2.p/pr2.servings,c:pt2.c/pr2.servings,f:pt2.f/pr2.servings,src:"recipe",fsid:null});
+        V.sheet.added=pr2.name;rerenderSheet();}}}
+  else if(act==="pbdone"){
+    var bk=V.sheet.back,dst=bk.draft.days[V.sheet.dayIdx];
+    if(dst){Object.keys(V.sheet.sel).sort().forEach(function(k){
+      var kp=k.split("|"),kds=kp[0],km=kp[1],kf=kp[2];
+      var srcL2=(DB.log[kds]&&DB.log[kds].meals&&DB.log[kds].meals[km])||[];
+      if(!kf){srcL2.forEach(function(e){dst.meals[km].push(cloneEntry(e));});}
+      else{var fe=srcL2.filter(function(x){return x.id===kf;})[0];if(fe)dst.meals[km].push(cloneEntry(fe));}
+    });}
+    V.sheet=bk;render();}
+  else if(act==="pbsave"){syncPBName();
+    var drv=V.sheet.draft;
+    var hasFood=drv.days.some(function(pd){return ["bf","lu","di","sn"].some(function(m){return (pd.meals[m]||[]).length>0;});});
+    if(!drv.days.length||!hasFood){V.sheet.err="Add at least one day with food before saving.";rerenderSheet();return;}
+    drv.name=(drv.name||"").trim()||"My plan";
+    pbRenumber();
+    if(V.sheet.editingId){DB.plans=DB.plans.map(function(p){return p.id===V.sheet.editingId?drv:p;});}
+    else DB.plans.unshift(drv);
     save();V.sheet=null;render();}
+  else if(act==="planimport"){planImport();}
   /* progress + settings */
   else if(act==="logweight"){
     var wv=parseFloat((document.getElementById("win")||{}).value);
-    if(!isNaN(wv)&&wv>50){day(V.date).weight=wv;
+    if(!isNaN(wv)&&wv>50){wv=Math.round(wv*10)/10;var dw=day(V.date);
+      dw.weights.push({t:V.date===todayStr()?Date.now():noonOf(V.date)+dw.weights.length*60000,w:wv});
+      dw.weights.sort(function(a,b){return a.t-b.t;});
       if(V.date===todayStr())DB.profile.weightLb=wv;
       save();render();}}
+  else if(act==="delweight"){
+    var wt=+el.getAttribute("data-t"),dwd=day(V.date);
+    dwd.weights=dwd.weights.filter(function(x){return x.t!==wt;});
+    if(V.date===todayStr()&&dwd.weights.length)DB.profile.weightLb=dwd.weights[dwd.weights.length-1].w;
+    save();render();}
   else if(act==="macroapply"){
     var rd=function(id,fb){var n=parseFloat((document.getElementById(id)||{}).value);return isNaN(n)?fb:n;};
     DB.profile.pT=rd("ipT",DB.profile.pT);DB.profile.cT=rd("icT",DB.profile.cT);DB.profile.fT=rd("ifT",DB.profile.fT);
@@ -1339,37 +1628,150 @@ document.addEventListener("click",function(ev){
   }
 });
 function syncRName(){var n=document.getElementById("rname");if(n&&V.sheet&&V.sheet.draft)V.sheet.draft.name=n.value;}
-/* swipe right on a diary entry to remove it */
-var SW={wrap:null,x:0,y:0,dx:0,active:false,blockUntil:0};
+function syncPBName(){var n=document.getElementById("pbname");if(n&&V.sheet&&V.sheet.draft)V.sheet.draft.name=n.value;}
+function pbRenumber(){if(V.sheet&&V.sheet.draft)V.sheet.draft.days.forEach(function(pd,i){pd.name="Day "+(i+1);});}
+function closeSheet(){if(V.sheet&&V.sheet.back){V.sheet=V.sheet.back;render();}else{V.sheet=null;render();}}
+/* undo toast — one shot, restores exactly what was removed */
+var UNDO={items:null,rec:null,timer:null};
+function showUndo(msg,items,rec){
+  UNDO.items=items;UNDO.rec=rec||null;clearTimeout(UNDO.timer);
+  var t=document.getElementById("toast"),m=document.getElementById("toastmsg");
+  if(m)m.textContent=msg;if(t)t.classList.add("show");
+  UNDO.timer=setTimeout(hideUndo,6000);
+}
+function hideUndo(){UNDO.items=null;UNDO.rec=null;var t=document.getElementById("toast");if(t)t.classList.remove("show");}
+function pvShare(){
+  var pl=planById(V.sheet.pid);
+  if(!pl||pl.builtin)return;
+  V.sheet.shareBusy=true;V.sheet.shareErr="";rerenderSheet();
+  api("/api/plan/share",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({plan:{name:pl.name,days:pl.days}})})
+   .then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j};});})
+   .then(function(res){
+     if(!V.sheet||V.sheet.kind!=="planview")return;
+     V.sheet.shareBusy=false;
+     if(res.ok&&res.j.code)V.sheet.shareCode=res.j.code;
+     else V.sheet.shareErr=res.j.error==="rate"?"Share limit reached for today — try tomorrow.":"Couldn’t create a code. Try again.";
+     rerenderSheet();})
+   .catch(function(){if(V.sheet&&V.sheet.kind==="planview"){V.sheet.shareBusy=false;V.sheet.shareErr="No connection — try again when you’re online.";rerenderSheet();}});
+}
+function planImport(){
+  var box=document.getElementById("impcode");
+  var code=((box&&box.value)||"").toUpperCase().replace(/[^A-Z2-9]/g,"");
+  if(code.length!==8){V.planMsg={t:"err",m:"Codes are 8 characters — check it and try again."};render();return;}
+  V.planMsg={t:"ok",m:"Importing…"};render();
+  api("/api/plan/shared?code="+code)
+   .then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j};});})
+   .then(function(res){
+     if(res.ok&&res.j.plan){
+       /* shared JSON is another user's content — rebuild it field by field */
+       var p=res.j.plan,clean={id:uid(),name:String(p.name||"Shared plan").slice(0,60),days:[]};
+       (Array.isArray(p.days)?p.days.slice(0,31):[]).forEach(function(pd,i){
+         var nd={name:"Day "+(i+1),meals:{bf:[],lu:[],di:[],sn:[]}};
+         ["bf","lu","di","sn"].forEach(function(m){
+           ((pd&&pd.meals&&Array.isArray(pd.meals[m]))?pd.meals[m].slice(0,40):[]).forEach(function(e){
+             nd.meals[m].push({id:uid(),name:String((e&&e.name)||"Food").slice(0,80),unit:String((e&&e.unit)||"x").slice(0,12),
+               step:+(e&&e.step)||1,base:+(e&&e.base)||1,amt:+(e&&e.amt)||1,
+               cal:+(e&&e.cal)||0,p:+(e&&e.p)||0,c:+(e&&e.c)||0,f:+(e&&e.f)||0,src:"shared",fsid:null});});});
+         clean.days.push(nd);});
+       if(!clean.days.length){V.planMsg={t:"err",m:"That code’s plan looks empty."};render();return;}
+       DB.plans.unshift(clean);save();
+       V.planMsg={t:"ok",m:"“"+clean.name+"” imported — it’s in your plans below."};render();
+     }else{
+       V.planMsg={t:"err",m:res.j.error==="not_found"?"No plan found for that code.":"Couldn’t import — try again."};render();}
+   })
+   .catch(function(){V.planMsg={t:"err",m:"No connection — try again when you’re online."};render();});
+}
+/* swipe LEFT on a diary entry to remove it — a deliberate, near-full-width pull.
+   The delete zone sits on the RIGHT; releasing early snaps back; undo toast after. */
+var SW={wrap:null,x:0,y:0,dx:0,active:false,blockUntil:0,w:0};
 document.addEventListener("touchstart",function(ev){
   var w=ev.target.closest&&ev.target.closest(".swipewrap");
   if(!w)return;
-  SW.wrap=w;SW.x=ev.touches[0].clientX;SW.y=ev.touches[0].clientY;SW.dx=0;SW.active=false;
+  SW.wrap=w;SW.x=ev.touches[0].clientX;SW.y=ev.touches[0].clientY;SW.dx=0;SW.active=false;SW.w=w.offsetWidth||320;
 },{passive:true});
 document.addEventListener("touchmove",function(ev){
   if(!SW.wrap)return;
   var dx=ev.touches[0].clientX-SW.x,dy=ev.touches[0].clientY-SW.y;
   if(!SW.active){
     if(Math.abs(dy)>14&&Math.abs(dy)>Math.abs(dx)){SW.wrap=null;return;}
-    if(dx>12&&Math.abs(dx)>Math.abs(dy)*1.3)SW.active=true;
+    if(dx<-12&&Math.abs(dx)>Math.abs(dy)*1.3)SW.active=true;
   }
-  if(SW.active&&dx>0){
+  if(SW.active&&dx<0){
     SW.dx=dx;
     var en=SW.wrap.querySelector(".entry");
-    if(en){en.style.transition="none";en.style.transform="translateX("+Math.min(dx,150)+"px)";}
+    if(en){en.style.transition="none";en.style.transform="translateX("+Math.max(dx,-SW.w)+"px)";}
     SW.wrap.classList.add("swiping");
+    var bg=SW.wrap.querySelector(".swipebg"),p=Math.min(1,-dx/(SW.w*0.7));
+    if(bg){bg.style.opacity=Math.min(1,p*1.25);
+      bg.textContent=p>=1?"Release to remove":"Keep swiping…";
+      bg.classList.toggle("armed",p>=1);}
   }
 },{passive:true});
-document.addEventListener("touchend",function(){
+function swReset(){
   if(!SW.wrap)return;
   var en=SW.wrap.querySelector(".entry");
-  if(SW.active&&SW.dx>95){
-    var m=SW.wrap.getAttribute("data-m"),id=SW.wrap.getAttribute("data-id");
-    var dd=day(V.date);dd.meals[m]=dd.meals[m].filter(function(x){return x.id!==id;});
-    save();SW.blockUntil=Date.now()+450;render();
-  }else if(en){en.style.transition="";en.style.transform="";SW.wrap.classList.remove("swiping");
-    if(SW.active)SW.blockUntil=Date.now()+450;}
+  if(en){en.style.transition="";en.style.transform="";}
+  SW.wrap.classList.remove("swiping");
+  var bg=SW.wrap.querySelector(".swipebg");if(bg){bg.classList.remove("armed");bg.style.opacity="";}
+}
+document.addEventListener("touchend",function(){
+  if(!SW.wrap)return;
+  var wrap=SW.wrap,en=wrap.querySelector(".entry");
+  if(SW.active&&-SW.dx>=SW.w*0.7){
+    var m=wrap.getAttribute("data-m"),id=wrap.getAttribute("data-id");
+    var dd=day(V.date),idx=-1,ent=null;
+    dd.meals[m].forEach(function(x,i){if(x.id===id){idx=i;ent=x;}});
+    SW.blockUntil=Date.now()+500;
+    if(ent){
+      if(en){en.style.transition="transform .16s ease";en.style.transform="translateX(-110%)";}
+      wrap.style.maxHeight=wrap.offsetHeight+"px";
+      requestAnimationFrame(function(){wrap.classList.add("gone");wrap.style.maxHeight="0px";});
+      setTimeout(function(){
+        dd.meals[m]=dd.meals[m].filter(function(x){return x.id!==id;});
+        save();render();
+        showUndo("Removed "+ent.name,[{date:V.date,meal:m,entry:ent,index:idx<0?0:idx}]);
+      },190);
+    }
+  }else{swReset();if(SW.active)SW.blockUntil=Date.now()+450;}
   SW.wrap=null;SW.active=false;SW.dx=0;
+});
+document.addEventListener("touchcancel",function(){swReset();SW.wrap=null;SW.active=false;SW.dx=0;});
+/* sheet drag: pull the grab bar / header — up = full screen (add & plan picker), down = close */
+var SH={el:null,y0:0,h0:0,dragging:false};
+document.addEventListener("touchstart",function(ev){
+  var g=ev.target.closest&&ev.target.closest(".sheet .grab, .sheet .shead");
+  if(!g)return;var s=g.closest(".sheet");if(!s)return;
+  SH.el=s;SH.y0=ev.touches[0].clientY;SH.h0=s.getBoundingClientRect().height;SH.dragging=false;
+},{passive:true});
+document.addEventListener("touchmove",function(ev){
+  if(!SH.el)return;
+  var dy=ev.touches[0].clientY-SH.y0;
+  if(!SH.dragging&&Math.abs(dy)<8)return;
+  SH.dragging=true;SH.el.classList.remove("snap");
+  var resizable=V.sheet&&(V.sheet.kind==="add"||V.sheet.kind==="pbpick");
+  if(resizable){
+    var maxH=window.innerHeight-12,hh=Math.max(140,Math.min(maxH,SH.h0-dy));
+    SH.el.style.height=hh+"px";
+  }else if(dy>0){SH.el.style.transform="translateY("+dy+"px)";}
+},{passive:true});
+document.addEventListener("touchend",function(){
+  if(!SH.el)return;
+  var el2=SH.el,wasDrag=SH.dragging;SH.el=null;SH.dragging=false;
+  if(!wasDrag)return;
+  var resizable=V.sheet&&(V.sheet.kind==="add"||V.sheet.kind==="pbpick");
+  var H=el2.getBoundingClientRect().height,vh=window.innerHeight;
+  if(resizable){
+    el2.classList.add("snap");el2.style.height="";
+    if(H>vh*0.76){V.sheet.full=true;el2.classList.remove("szhalf");el2.classList.add("szfull");rerenderSheet();}
+    else if(H<vh*0.34){stopZX();closeSheet();}
+    else{V.sheet.full=false;el2.classList.remove("szfull");el2.classList.add("szhalf");rerenderSheet();}
+  }else{
+    var mt2=/translateY\(([\d.]+)px\)/.exec(el2.style.transform||""),dyv=mt2?+mt2[1]:0;
+    if(dyv>110){stopZX();closeSheet();}
+    else{el2.style.transition="transform .18s ease";el2.style.transform="";
+      setTimeout(function(){el2.style.transition="";},200);}
+  }
 });
 boot();
 </script>

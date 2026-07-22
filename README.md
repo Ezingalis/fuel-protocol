@@ -18,11 +18,11 @@ A personal nutrition diary — MyFitnessPal-style — built as one HTML file plu
 
 ## Features
 
-- **Diary** — real calendar dates, 4 meals, calorie ring (calories left), macro bars, water tracker, copy-meal-from-yesterday
-- **Add food** — recents, frequents, favorites, custom foods, quick add (cal/macros), full-text search (local library + FatSecret + Open Food Facts), barcode scanner
+- **Diary** — real calendar dates, 4 meals, calorie ring (calories left), macro bars, water tracker, copy-meal-from-yesterday, deliberate swipe-to-remove with undo
+- **Add food** — recents, frequents, favorites, custom foods, quick add (cal/macros), full-text search (your foods first, then FatSecret, then Open Food Facts), barcode scanner, half↔full-screen sheet
 - **Recipes** — build once from ingredients, auto per-serving macros, log by the serving
-- **Plans** — built-in 3-Week Cut (21 days), save any 1–3 logged diary days as a reusable plan, apply a plan day in one tap
-- **Progress** — 14-day calorie chart vs target, weight trend line, averages
+- **Plans** — plan tiles with computed profiles (cal/day, protein level, tuned-to bodyweight), plain-English review against your own TDEE, a builder that copies meals/foods from logged diary days, clean remove-plan-from-calendar with undo, share/import via 8-character code
+- **Progress** — 14-day calorie chart vs target, weight trend from timestamped weigh-ins (multiple per day), averages
 - **Settings** — Mifflin-St Jeor BMR/TDEE, goal-rate → auto calorie target or custom, macro targets by grams or percent, export/import
 
 ## Accounts

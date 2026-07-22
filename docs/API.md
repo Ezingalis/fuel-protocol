@@ -59,6 +59,27 @@ Body: `{ "state": { ... }, "updatedAt": 1753000000000 }`
 | `413 too_large` | Blob over 4 MB |
 | `401 signed_out` | No/invalid session |
 
+## Plan sharing (same-origin, session required)
+
+### `POST /api/plan/share`
+Body: `{ "plan": { "name": "...", "days": [ { "name": "Day 1", "meals": { "bf": [...], "lu": [...], "di": [...], "sn": [...] } } ] } }`
+
+| Response | Meaning |
+|---|---|
+| `{ "ok": true, "code": "2FDGMF4D" }` | Stored; the 8-char code retrieves it |
+| `400 bad_body / bad_plan` | Malformed JSON / no days |
+| `413 too_large` | Serialized plan over 150 KB |
+| `429 rate` | More than 20 shares in 24 h |
+| `401 signed_out` | No session |
+
+Plans are capped at 31 days on store. Codes use an unambiguous alphabet
+(no 0/O, 1/I/L) — they're identifiers, not secrets.
+
+### `GET /api/plan/shared?code=2FDGMF4D`
+`{ "plan": { name, days } }` — or `400 bad_code` (wrong shape), `404 not_found`,
+`401 signed_out`. The importing client regenerates all entry ids and coerces
+every field; a shared plan is another user's content and is never trusted as-is.
+
 ## Food (open, CORS `*`)
 
 ### `GET /api/search?q=banza&max=15`

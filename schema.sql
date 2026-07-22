@@ -29,3 +29,13 @@ CREATE TABLE IF NOT EXISTS magic_links (
 CREATE INDEX IF NOT EXISTS idx_links_email   ON magic_links(email);
 CREATE INDEX IF NOT EXISTS idx_links_expires ON magic_links(expires_at);
 CREATE INDEX IF NOT EXISTS idx_links_ip      ON magic_links(ip_hash);
+
+-- Meal plans shared by code. Creating and fetching both require a session.
+CREATE TABLE IF NOT EXISTS shared_plans (
+  code        TEXT PRIMARY KEY,
+  json        TEXT NOT NULL,
+  created_by  TEXT NOT NULL,
+  created_at  INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_shared_by ON shared_plans(created_by);
