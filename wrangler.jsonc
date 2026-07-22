@@ -8,10 +8,7 @@
     "binding": "ASSETS"
   },
   "vars": {
-    "MAIL_FROM": "Fuel Protocol <onboarding@resend.dev>",
-    // Shows sign-in links on screen when email isn't configured.
-    // ⚠️ DELETE THIS LINE before anyone else uses the app (see SETUP.md §7).
-    "ALLOW_DEV_LINK": "1"
+    "MAIL_FROM": "Fuel Protocol <fuel@ethanzingalis.com>"
   },
   "d1_databases": [
     {
