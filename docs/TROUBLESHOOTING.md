@@ -30,7 +30,9 @@ Links are single-use and die after 15 minutes. Email apps that "preview" links
 can consume them. Request a fresh one; if it persists, check the device clock.
 
 ## `429` when requesting sign-in links
-One link per email per 60 seconds, by design. Wait a minute.
+One link per email per 60 seconds, by design — wait a minute. There's also a
+per-IP cap of 15 requests per 24 h (`IP_LINKS_PER_DAY`) so strangers can't
+drain the email quota; legitimate users won't hit it.
 
 ## Everyone got signed out
 `SESSION_SECRET` changed. That's the designed behavior (emergency logout).

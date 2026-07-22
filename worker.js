@@ -204,11 +204,20 @@ async function authRoute(url, request, env) {
     ).bind(email).first();
     if (recent && now - recent.created_at < 60000) return json({ error: "rate" }, 429);
 
+    /* Per-IP daily cap so a stranger can't burn the email quota.
+       Only a hash of the IP is stored; rows are kept 24h for this count. */
+    const ipHash = await sha256hex(request.headers.get("CF-Connecting-IP") || "0");
+    const ipCap = parseInt(env.IP_LINKS_PER_DAY || "15", 10);
+    const used = await db.prepare(
+      "SELECT COUNT(*) AS n FROM magic_links WHERE ip_hash=?1 AND created_at > ?2"
+    ).bind(ipHash, now - 864e5).first();
+    if (used && used.n >= ipCap) return json({ error: "rate" }, 429);
+
     const token = randomToken();
     await db.prepare(
-      "INSERT INTO magic_links (token_hash,email,created_at,expires_at) VALUES (?1,?2,?3,?4)"
-    ).bind(await sha256hex(token), email, now, now + LINK_MINUTES * 60000).run();
-    await db.prepare("DELETE FROM magic_links WHERE expires_at < ?1").bind(now).run();
+      "INSERT INTO magic_links (token_hash,email,created_at,expires_at,ip_hash) VALUES (?1,?2,?3,?4,?5)"
+    ).bind(await sha256hex(token), email, now, now + LINK_MINUTES * 60000, ipHash).run();
+    await db.prepare("DELETE FROM magic_links WHERE created_at < ?1").bind(now - 864e5).run();
 
     const link = url.origin + "/api/auth/verify?token=" + encodeURIComponent(token);
     const sent = await sendMagicEmail(env, email, link);
@@ -368,7 +377,7 @@ export default {
         r.headers.set("Access-Control-Allow-Origin", "*");
         return r;
       }
-      catch (e) { return json({ error: String(e && e.message || e) }, 500); }
+      catch (e) { return json({ error: "server_error" }, 500); }
     }
     return env.ASSETS.fetch(request);
   }

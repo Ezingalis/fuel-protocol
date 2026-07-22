@@ -30,7 +30,7 @@ Body: `{ "email": "you@example.com" }` — creates the account if new.
 | `{ "ok": true }` | Link emailed |
 | `{ "ok": true, "devLink": "..." }` | Email failed/unset and `ALLOW_DEV_LINK=1` |
 | `400 { "error": "email" }` | Invalid address |
-| `429 { "error": "rate" }` | One link per email per 60 s |
+| `429 { "error": "rate" }` | One link per email per 60 s, or the per-IP daily cap (default 15) |
 | `502 { "error": "mail" }` | Send failed, no dev fallback |
 | `503 { "error": "not_configured" }` | Missing D1 or `SESSION_SECRET` |
 

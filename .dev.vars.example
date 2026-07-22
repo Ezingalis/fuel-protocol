@@ -8,3 +8,5 @@ MAIL_FROM=Fuel Protocol <onboarding@resend.dev>
 FS_KEY=
 FS_SECRET=
 ALLOW_DEV_LINK=1
+# High cap locally so repeated test runs never trip the per-IP limit (prod default: 15)
+IP_LINKS_PER_DAY=10000

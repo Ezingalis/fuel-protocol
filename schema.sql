@@ -22,8 +22,10 @@ CREATE TABLE IF NOT EXISTS magic_links (
   email       TEXT NOT NULL,
   created_at  INTEGER NOT NULL,
   expires_at  INTEGER NOT NULL,
-  used_at     INTEGER
+  used_at     INTEGER,
+  ip_hash     TEXT              -- SHA-256 of requester IP, for the daily cap
 );
 
 CREATE INDEX IF NOT EXISTS idx_links_email   ON magic_links(email);
 CREATE INDEX IF NOT EXISTS idx_links_expires ON magic_links(expires_at);
+CREATE INDEX IF NOT EXISTS idx_links_ip      ON magic_links(ip_hash);

@@ -55,6 +55,13 @@ test("app: only allowed external resource is the zxing barcode lib", () => {
   }
 });
 
+test("app: barcode lib is version-pinned with SRI integrity", () => {
+  assert.match(html, /unpkg\.com\/@zxing\/library@0\.20\.0\/umd\/index\.min\.js/,
+    "zxing must pin the exact file, not a bare package URL");
+  assert.match(html, /integrity="sha384-[A-Za-z0-9+/=]+"/, "SRI hash missing");
+  assert.match(html, /crossOrigin="anonymous"/, "crossOrigin required for SRI");
+});
+
 test("app: no API keys or bearer tokens baked into the page", () => {
   assert.doesNotMatch(html, /re_[A-Za-z0-9]{16,}/, "looks like a Resend key");
   assert.doesNotMatch(html, /Bearer\s+[A-Za-z0-9_\-.]{20,}/, "looks like a bearer token");
@@ -92,6 +99,17 @@ test("worker: dev link only revealed behind ALLOW_DEV_LINK", () => {
   assert.match(worker, /ALLOW_DEV_LINK\s*===\s*"1"/);
 });
 
+test("worker: sign-in requests carry a per-IP daily cap", () => {
+  assert.ok(worker.includes("ip_hash"), "IP hash column unused");
+  assert.ok(worker.includes("IP_LINKS_PER_DAY"), "cap must be env-tunable");
+  assert.match(worker, /CF-Connecting-IP/, "must read the client IP header");
+});
+
+test("worker: 500s return a generic error, not internals", () => {
+  assert.ok(worker.includes('json({ error: "server_error" }, 500)'));
+  assert.doesNotMatch(worker, /error:\s*String\(e/, "error messages must not be echoed");
+});
+
 /* ---------- schema.sql ---------- */
 
 test("schema: defines the three tables", () => {
@@ -108,6 +126,12 @@ test("schema: magic_links keyed by token_hash, never raw token", () => {
 test("schema: lookup indexes exist", () => {
   assert.match(schema, /idx_links_email/);
   assert.match(schema, /idx_links_expires/);
+  assert.match(schema, /idx_links_ip/);
+});
+
+test("schema: IP stored only as a hash", () => {
+  assert.match(schema, /ip_hash\s+TEXT/);
+  assert.doesNotMatch(schema, /\bip\s+TEXT/, "raw IP column must not exist");
 });
 
 /* ---------- wrangler.jsonc ---------- */

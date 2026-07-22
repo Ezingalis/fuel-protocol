@@ -1095,7 +1095,7 @@ function scheduleApi(){
 }
 /* barcode via ZXing on demand */
 var zx=null;
-function loadZX(){return new Promise(function(res,rej){if(window.ZXing)return res();var s=document.createElement("script");s.src="https://unpkg.com/@zxing/library@0.20.0";s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
+function loadZX(){return new Promise(function(res,rej){if(window.ZXing)return res();var s=document.createElement("script");s.src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js";s.integrity="sha384-DOP3OlIzNeWpufSZMxZihUYSqCAZFirsVmSAVg8ItvU9ac1FcQF6ZHjQ9CbCznNS";s.crossOrigin="anonymous";s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
 function bindScan(){
   var v=document.getElementById("cam");if(!v)return;
   loadZX().then(function(){
