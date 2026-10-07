@@ -13,6 +13,8 @@
   "vars": {
     "MAIL_FROM": "Fuel Protocol <fuel@ethanzingalis.com>"
   },
+  // Workers AI: free fallback reader for workout PDF import
+  "ai": { "binding": "AI" },
   "d1_databases": [
     {
       "binding": "DB",

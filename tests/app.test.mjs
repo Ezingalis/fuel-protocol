@@ -98,10 +98,11 @@ test("app: no API keys or bearer tokens baked into the page", () => {
 /* ---------- worker.js ---------- */
 
 test("worker: secrets are read from env, never inlined", () => {
-  for (const name of ["SESSION_SECRET", "RESEND_KEY", "FS_KEY", "FS_SECRET"]) {
+  for (const name of ["SESSION_SECRET", "RESEND_KEY", "FS_KEY", "FS_SECRET", "ANTHROPIC_API_KEY"]) {
     assert.ok(worker.includes("env." + name), `worker never reads env.${name}`);
   }
   assert.doesNotMatch(worker, /re_[A-Za-z0-9]{16,}/);
+  assert.doesNotMatch(worker + html, /sk-ant-[A-Za-z0-9_-]{10,}/, "looks like an Anthropic key");
   assert.doesNotMatch(worker, /SESSION_SECRET\s*=\s*["']/, "SESSION_SECRET assigned a literal");
 });
 
@@ -140,8 +141,28 @@ test("worker: 500s return a generic error, not internals", () => {
 
 /* ---------- schema.sql ---------- */
 
-test("schema: defines the four tables", () => {
-  for (const t of ["users", "state", "magic_links", "shared_plans"]) {
+test("workouts: PDF import is session-gated, size-capped, and rate-limited", () => {
+  const i = worker.indexOf('"/api/gym/import"');
+  assert.ok(i > 0, "import route missing");
+  const block = worker.slice(i, i + 1400);
+  for (const must of ["readSession", "IMPORT_MAX_BYTES", "%PDF-", "IMPORTS_PER_DAY"]) {
+    assert.ok(block.includes(must), `import route missing ${must}`);
+  }
+  assert.ok(html.includes("/api/gym/import"), "app never calls the import endpoint");
+  assert.ok(html.includes('id="pdfin"'), "PDF picker missing");
+});
+
+test("programs: week controls exist and every move is undoable", () => {
+  for (const act of ["prognext", "progskip", "progback", "progredo", "progrestart", "progend", "progstart", "gimstart"]) {
+    assert.ok(html.includes(`"${act}"`), `missing program action ${act}`);
+  }
+  assert.ok(html.includes('id="progjump"'), "jump-to-week picker missing");
+  assert.ok(html.includes("UNDO.gym=snap"), "program changes must snapshot for undo");
+  assert.ok(html.includes("programs:[],active:null"), "program state missing from freshDB");
+});
+
+test("schema: defines the five tables", () => {
+  for (const t of ["users", "state", "magic_links", "shared_plans", "gym_imports"]) {
     assert.match(schema, new RegExp(`CREATE TABLE IF NOT EXISTS ${t}`), `missing table ${t}`);
   }
 });

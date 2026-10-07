@@ -17,6 +17,7 @@ or dashboard: **Worker → Settings → Variables and Secrets**.
 | `RESEND_KEY` | Sends sign-in emails | Create at resend.com → API Keys, **sending access only** |
 | `FS_KEY` | FatSecret Consumer Key | Optional — without it, search/barcode run on Open Food Facts |
 | `FS_SECRET` | FatSecret Consumer Secret | Pairs with `FS_KEY` |
+| `ANTHROPIC_API_KEY` | Claude reads workout PDFs | Optional. Without it, PDF import uses the free Workers AI reader (text-layer only, first block of weeks). With it, Claude reads every page including tables and scans; Workers AI stays as the fallback. Create at console.anthropic.com → API Keys |
 
 ## Plain variables (in `wrangler.jsonc` → `vars`)
 
@@ -24,6 +25,9 @@ or dashboard: **Worker → Settings → Variables and Secrets**.
 |---|---|---|
 | `MAIL_FROM` | Sender for sign-in emails | Must be Resend-verified. `onboarding@resend.dev` delivers **only to your own Resend account email** |
 | `ALLOW_DEV_LINK` | `"1"` shows sign-in links on screen when email fails | **First-run testing only. Delete before anyone else uses the app** — while on, anyone can request a link for any address and read it |
+| `IMPORTS_PER_DAY` | Max PDF imports per user per 24 h | Default `10`. Caps AI spend |
+| `IMPORT_MODEL` | Claude model for PDF import | Default `claude-opus-5-5` |
+| `IMPORT_EFFORT` | Claude effort for PDF import | Default `medium` (`low` is faster and cheaper) |
 | `IP_LINKS_PER_DAY` | Max sign-in requests per IP per 24 h | Default `15` when unset. Set high in `.dev.vars` so local test runs never trip it. Only a SHA-256 of the IP is ever stored |
 
 ## Local development

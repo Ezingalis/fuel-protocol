@@ -39,3 +39,12 @@ CREATE TABLE IF NOT EXISTS shared_plans (
 );
 
 CREATE INDEX IF NOT EXISTS idx_shared_by ON shared_plans(created_by);
+
+-- One row per workout-PDF import attempt; caps AI spend per user per day.
+CREATE TABLE IF NOT EXISTS gym_imports (
+  user_id     TEXT NOT NULL,
+  created_at  INTEGER NOT NULL,
+  engine      TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_imports_user ON gym_imports(user_id, created_at);

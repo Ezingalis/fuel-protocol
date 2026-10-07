@@ -98,6 +98,27 @@ served as a static asset and fetched lazily. No worker or schema changes;
 feature design inspired by [openGym](https://github.com/DuarteSantos8/openGym)
 (AGPL) but implemented clean-room — no code or data from it.
 
+## Programs and PDF import
+
+`DB.gym.programs` holds multi-week programs: `weeks[] → sessions[] → ex[]`, each
+exercise carrying sets, reps, a `target` line (%1RM / RPE / rep range as written),
+load, and prescribed `rest` (which drives the rest timer). `DB.gym.active`
+tracks the running program: current week `w` and `done` marks keyed `"week|session"`.
+Sessions within a week run **in order, not by weekday** — missing a day never
+breaks the program, the next session is just the first one not done. Redo / skip /
+back / jump / restart / end all mutate only `active`, snapshot it first, and offer
+Undo; workout logs are never touched.
+
+`POST /api/gym/import` turns a PDF into that structure. With `ANTHROPIC_API_KEY`
+it uploads the PDF through the Files API (deleted right after, 1 h expiry as a
+backstop), asks Claude for JSON matching a strict schema (structured outputs,
+server-side refusal fallback), and streams heartbeats so the minutes-long read
+never idles out. Without a key — or if Claude fails — Workers AI converts the PDF
+to markdown and Llama fills the same schema from the first block of weeks. Either
+way the worker rebuilds the output field by field with hard bounds and expands
+"Week 1-2"-style blocks into individual weeks. Imports are capped per user per day
+in `gym_imports`.
+
 ## Why D1 (vs. Supabase & friends)
 
 The data model is one blob per user — no relational queries, no realtime, no

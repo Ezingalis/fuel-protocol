@@ -80,6 +80,31 @@ Plans are capped at 31 days on store. Codes use an unambiguous alphabet
 `401 signed_out`. The importing client regenerates all entry ids and coerces
 every field; a shared plan is another user's content and is never trusted as-is.
 
+## Workout PDF import (same-origin, session required)
+
+### `POST /api/gym/import`
+Body: the raw PDF bytes, `Content-Type: application/pdf`, max 10 MB.
+
+Validation failures return immediately as JSON: `401 signed_out`,
+`400 empty`, `413 too_large`, `415 not_pdf`, `429 rate` (over
+`IMPORTS_PER_DAY`, default 10 per user per 24 h), `503 not_configured`.
+
+Otherwise the response is `200 application/x-ndjson`: blank heartbeat lines
+every 5 s while the AI reads (20 s to several minutes), then one JSON line:
+
+```json
+{ "ok": true, "engine": "claude" | "workers-ai", "truncated": false,
+  "program": { "program": "…", "notes": "…", "padded": false,
+    "weeks": [ { "label": "Week 1", "deload": false, "repeated": false,
+      "sessions": [ { "name": "Day 1", "days": [],
+        "exercises": [ { "name": "…", "muscle": "chest", "sets": 3, "reps": 6,
+          "target": "6 reps @ 75-80% 1RM · RPE 8", "lb": 0, "rest": 240, "notes": "…" } ] } ] } ] } }
+```
+
+or `{ "error": "no_workouts" | "unreadable" | "refused" | "too_long" | "failed" }`.
+Read the last non-empty line. `padded: true` means some weeks are copies of
+the last week the reader wrote (`repeated: true` on those weeks).
+
 ## Food (open, CORS `*`)
 
 ### `GET /api/search?q=banza&max=15`
