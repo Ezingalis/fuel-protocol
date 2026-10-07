@@ -65,6 +65,12 @@ test("workouts: tab, library fetch, and session flow wired in", () => {
   assert.ok(html.includes("gym:{week:{}"), "gym state missing from freshDB");
 });
 
+test("app: tab bar steps aside for sheets and the keyboard", () => {
+  assert.match(html, /body\.has-sheet \.tabbar/, "open sheets must hide the tab bar (it paints over them otherwise)");
+  assert.ok(html.includes('classList.toggle("has-sheet"'), "render must toggle has-sheet");
+  assert.match(html, /body\.kb \.tabbar/, "focused inputs must hide the tab bar");
+});
+
 test("app: undo toast wired up", () => {
   assert.ok(html.includes('id="toast"'), "toast container missing");
   assert.ok(html.includes('data-act="undo"'), "undo action missing");

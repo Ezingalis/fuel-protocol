@@ -27,7 +27,7 @@ body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"
 #app{position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
   padding-bottom:calc(var(--tbh,84px) + 28px)}
 /* while typing on a phone the keyboard lifts fixed bars over the input — get the bar out of the way */
-body.kb .tabbar{display:none}
+body.kb .tabbar,body.has-sheet .tabbar{display:none}
 body.kb #app{padding-bottom:40vh}
 .wrap{max-width:480px;margin:0 auto;padding:14px 14px 8px}
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;padding:0}
@@ -1694,6 +1694,8 @@ var ICONS={
 };
 function render(){
   var el=document.getElementById("app");
+  /* sheets live inside #app's stacking context, so the fixed tab bar would paint over them */
+  document.body.classList.toggle("has-sheet",!!V.sheet&&AUTH.state==="in");
   if(AUTH.state==="loading"){el.innerHTML='<div class="wrap" style="padding-top:90px;text-align:center"><div class="sub">Loading your diary\u2026</div></div>';
     document.getElementById("tabbar").innerHTML="";return;}
   if(AUTH.state==="out"){el.innerHTML=renderAuth();document.getElementById("tabbar").innerHTML="";
