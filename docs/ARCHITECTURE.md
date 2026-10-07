@@ -85,6 +85,19 @@ Each diary day stores `weights: [{ t, w }]` — every weigh-in keeps its exact
 timestamp, so a 9 AM and a 10 PM entry coexist. The progress chart plots the
 daily average. (Migrated automatically from the old single `weight` field.)
 
+## Workouts
+
+`DB.gym` rides the same blob: `week` (weekday → routine id), `routines`,
+`logs` (one per date: exercises → sets `{reps, lb, done}`), and `prs` (best set
+per exercise by Epley e1RM; plain reps for bodyweight). Guided sessions pre-fill
+each set from the most recent log of the same exercise. The exercise library is
+`public/exercises.json` — 876 entries trimmed (name / muscle / equipment /
+category) from the public-domain
+[free-exercise-db](https://github.com/yuhonas/free-exercise-db) (Unlicense),
+served as a static asset and fetched lazily. No worker or schema changes;
+feature design inspired by [openGym](https://github.com/DuarteSantos8/openGym)
+(AGPL) but implemented clean-room — no code or data from it.
+
 ## Why D1 (vs. Supabase & friends)
 
 The data model is one blob per user — no relational queries, no realtime, no

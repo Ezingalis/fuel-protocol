@@ -22,7 +22,8 @@ A personal nutrition diary — MyFitnessPal-style — built as one HTML file plu
 - **Add food** — recents, frequents, favorites, custom foods, quick add (cal/macros), full-text search (your foods first, then FatSecret, then Open Food Facts), barcode scanner, half↔full-screen sheet
 - **Recipes** — build once from ingredients, auto per-serving macros, log by the serving
 - **Plans** — plan tiles with computed profiles (cal/day, protein level, tuned-to bodyweight), plain-English review against your own TDEE, a builder that copies meals/foods from logged diary days, clean remove-plan-from-calendar with undo, share/import via 8-character code
-- **Progress** — 14-day calorie chart vs target, weight trend from timestamped weigh-ins (multiple per day), averages
+- **Workouts** — routines per weekday over a 876-exercise library (public-domain [free-exercise-db](https://github.com/yuhonas/free-exercise-db)), guided sessions with weights pre-filled from last time, 90s rest timer, set ticking, PR detection, 7-day muscle coverage
+- **Progress** — 14-day calorie chart vs target, weight trend from timestamped weigh-ins (multiple per day), averages, strength PRs
 - **Settings** — Mifflin-St Jeor BMR/TDEE, goal-rate → auto calorie target or custom, macro targets by grams or percent, export/import
 
 ## Accounts

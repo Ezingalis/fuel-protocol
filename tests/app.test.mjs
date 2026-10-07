@@ -48,6 +48,23 @@ test("app: calls every worker endpoint it depends on", () => {
   }
 });
 
+test("workouts: exercise library is present and well-shaped", () => {
+  const ex = JSON.parse(read("public/exercises.json"));
+  assert.ok(Array.isArray(ex) && ex.length > 800, `only ${ex.length} exercises`);
+  for (const item of [ex[0], ex[ex.length - 1]]) {
+    for (const k of ["n", "m", "e", "c"]) assert.ok(k in item, `exercise missing field ${k}`);
+  }
+});
+
+test("workouts: tab, library fetch, and session flow wired in", () => {
+  assert.ok(html.includes("/exercises.json"), "app never loads the exercise library");
+  assert.ok(html.includes('["gym","Workout"]'), "Workout tab missing from tab bar");
+  for (const act of ["gymstart", "gymfinish", "gymset", "grsave", "gppick"]) {
+    assert.ok(html.includes(`"${act}"`), `missing workout action ${act}`);
+  }
+  assert.ok(html.includes("gym:{week:{}"), "gym state missing from freshDB");
+});
+
 test("app: undo toast wired up", () => {
   assert.ok(html.includes('id="toast"'), "toast container missing");
   assert.ok(html.includes('data-act="undo"'), "undo action missing");
