@@ -1098,8 +1098,40 @@ function renderGym(){
   h+='<label class="bigbtn ghost" style="display:block;text-align:center" for="pdfin">📄 Import a program from PDF</label>'+
      '<input id="pdfin" type="file" accept="application/pdf,.pdf" style="display:none">';
   if(V.gymMsg)h+='<div class="'+(V.gymMsg.t==="err"?"warn":"okline")+'">'+esc(V.gymMsg.m)+'</div>';
-  h+='<div class="fnote">Upload a training program (up to 10 MB). AI reads every week — sets, reps, %1RM, RPE, rest — and you review it before anything is saved. The PDF is read once and not stored.</div>';
+  h+='<div class="fnote">Upload a training program (up to 10 MB, 1 a day). AI reads every week — sets, reps, %1RM, RPE, rest — and you review it before anything is saved. The PDF is read once and not stored.</div>';
+  h+='<div class="card"><div class="eyebrow">Have a program code?</div>'+
+     '<div class="frow" style="margin-top:8px"><div><input id="progcode" placeholder="8-character code" autocapitalize="characters" autocomplete="off"></div>'+
+     '<button class="pillbtn ghost" data-act="progcodeimp" style="flex:0 0 auto">Open</button></div></div>';
   h+='</div>';return h;
+}
+/* program JSON from the server (PDF import or a code) is coerced field by field
+   before it becomes part of the diary */
+function programDraftFrom(p){
+  p=p||{};
+  var S=function(v,n){return String(v==null?"":v).trim().slice(0,n);};
+  var N=function(v,lo,hi,d){v=Math.round(+v);return isFinite(v)?Math.min(hi,Math.max(lo,v)):d;};
+  var A=function(v){return Array.isArray(v)?v:[];};
+  var weeks=A(p.weeks).slice(0,26).map(function(w){w=w||{};return{label:S(w.label,40),deload:w.deload===true,repeated:w.repeated===true,
+    sessions:A(w.sessions).slice(0,7).map(function(s,si){s=s||{};return{name:S(s.name,40)||"Day "+(si+1),days:[],
+      ex:A(s.exercises).slice(0,15).map(function(e){e=e||{};return{n:S(e.name,80),m:S(e.muscle,20)||"other",
+        sets:N(e.sets,1,10,3),reps:N(e.reps,1,100,10),lb:N(e.lb,0,1500,0),target:S(e.target,80),rest:N(e.rest,0,900,0),notes:S(e.notes,140)};})
+        .filter(function(e){return e.n;})};}).filter(function(s){return s.ex.length;})};}).filter(function(w){return w.sessions.length;});
+  if(!weeks.length)return null;
+  return{id:uid(),name:S(p.program,80)||"Imported program",notes:S(p.notes,500),padded:p.padded===true,src:"pdf",at:Date.now(),weeks:weeks};
+}
+function progCodeImport(){
+  var box=document.getElementById("progcode");
+  var code=((box&&box.value)||"").toUpperCase().replace(/[^A-Z2-9]/g,"");
+  if(code.length!==8){V.gymMsg={t:"err",m:"Codes are 8 characters — check it and try again."};render();return;}
+  V.gymMsg={t:"ok",m:"Opening…"};render();
+  api("/api/plan/shared?code="+code)
+   .then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j};});})
+   .then(function(res){
+     var pl=res.ok&&res.j.plan,d=pl&&pl.kind==="program"?programDraftFrom(pl.program):null;
+     if(!d){V.gymMsg={t:"err",m:res.ok?"That code isn’t a workout program — meal plan codes go in Plans → Import.":"No program found for that code."};render();return;}
+     V.gymMsg=null;
+     V.sheet={kind:"gymimport",stage:"review",tok:uid(),engine:"chat",truncated:false,open:{0:true},draft:d};render();})
+   .catch(function(){V.gymMsg={t:"err",m:"No connection — try again when you’re online."};render();});
 }
 function progViewBody(){
   var sh=V.sheet,p=progById(sh.pid);
@@ -1115,7 +1147,7 @@ function progViewBody(){
   }
   return h;
 }
-var GIMP_ERR={rate:"You’ve hit today’s import limit. Try again tomorrow.",too_large:"That PDF is over 10 MB.",
+var GIMP_ERR={rate:"You’ve used today’s PDF import (1 a day). Try again tomorrow.",too_large:"That PDF is over 10 MB.",
   not_pdf:"That file isn’t a PDF.",empty:"That file is empty.",not_configured:"PDF import isn’t switched on for this app yet.",
   no_workouts:"Couldn’t find a workout program in that PDF.",unreadable:"Couldn’t read the text in that PDF — scanned or photo PDFs need the Claude reader.",
   refused:"The AI declined to read that document.",too_long:"That program is too long to convert in one go — try a shorter PDF.",
@@ -1133,14 +1165,9 @@ function gymImport(file){
   var finish=function(res){
     clearInterval(GIMP.timer);
     if(!V.sheet||V.sheet.tok!==tok)return;
-    if(res&&res.ok&&res.program&&Array.isArray(res.program.weeks)){
-      var p=res.program;
-      V.sheet={kind:"gymimport",stage:"review",tok:tok,engine:res.engine,truncated:!!res.truncated,open:{0:true},
-        draft:{id:uid(),name:p.program,notes:p.notes||"",padded:!!p.padded,src:"pdf",at:Date.now(),
-          weeks:p.weeks.map(function(w){return{label:w.label||"",deload:!!w.deload,repeated:!!w.repeated,
-            sessions:w.sessions.map(function(s){return{name:s.name,days:s.days||[],
-              ex:s.exercises.map(function(e){return{n:e.name,m:e.muscle,sets:e.sets,reps:e.reps,lb:e.lb,
-                target:e.target||"",rest:e.rest||0,notes:e.notes||""};})};})};})}};
+    var pd=res&&res.ok?programDraftFrom(res.program):null;
+    if(pd){
+      V.sheet={kind:"gymimport",stage:"review",tok:tok,engine:res.engine,truncated:!!res.truncated,open:{0:true},draft:pd};
     }else{
       V.sheet=null;V.gymMsg={t:"err",m:GIMP_ERR[res&&res.error]||"Couldn’t read that PDF. Try again."};
     }
@@ -1161,7 +1188,7 @@ function gymImportBody(){
       '<div class="fnote" style="text-align:center">Full multi-week programs take 1–5 minutes to read. Keep this open — closing it cancels the import.</div>';
   var d=sh.draft,h='';
   h+='<div class="mealhd"><span class="mt">'+esc(d.name)+'</span><span class="chip" style="padding:4px 9px;font-size:11px">'+
-     (sh.engine==="claude"?"Read by Claude":"Read by Cloudflare AI")+'</span></div>';
+     (sh.engine==="claude"?"Read by Claude":sh.engine==="chat"?"Converted in chat":"Read by Cloudflare AI")+'</span></div>';
   if(d.notes)h+='<div class="fnote">'+esc(d.notes)+'</div>';
   if(sh.truncated)h+='<div class="warn">Long PDF — the free reader only got through the first part. Check nothing’s missing.</div>';
   if(d.padded)h+='<div class="warn">'+(sh.engine==="claude"?"Some weeks weren’t written out":"The free reader only takes the first block of weeks")+
@@ -2014,6 +2041,7 @@ document.addEventListener("click",function(ev){
     else DB.plans.unshift(drv);
     save();V.sheet=null;render();}
   else if(act==="planimport"){planImport();}
+  else if(act==="progcodeimp"){progCodeImport();}
   /* workouts */
   else if(act==="gymstart"){
     var gsi=el.getAttribute("data-s");
@@ -2190,6 +2218,8 @@ function planImport(){
   api("/api/plan/shared?code="+code)
    .then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j};});})
    .then(function(res){
+     if(res.ok&&res.j.plan&&res.j.plan.kind==="program"){
+       V.planMsg={t:"err",m:"That’s a workout program code — open it from the Workout tab."};render();return;}
      if(res.ok&&res.j.plan){
        /* shared JSON is another user's content — rebuild it field by field */
        var p=res.j.plan,clean={id:uid(),name:String(p.name||"Shared plan").slice(0,60),days:[]};

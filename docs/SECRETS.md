@@ -25,7 +25,7 @@ or dashboard: **Worker → Settings → Variables and Secrets**.
 |---|---|---|
 | `MAIL_FROM` | Sender for sign-in emails | Must be Resend-verified. `onboarding@resend.dev` delivers **only to your own Resend account email** |
 | `ALLOW_DEV_LINK` | `"1"` shows sign-in links on screen when email fails | **First-run testing only. Delete before anyone else uses the app** — while on, anyone can request a link for any address and read it |
-| `IMPORTS_PER_DAY` | Max PDF imports per user per 24 h | Default `10`. Caps AI spend |
+| `IMPORTS_PER_DAY` | Max PDF imports per user per 24 h | Set to `"1"` in wrangler.jsonc (code default 10). Caps AI spend |
 | `IMPORT_MODEL` | Claude model for PDF import | Default `claude-opus-5-5` |
 | `IMPORT_EFFORT` | Claude effort for PDF import | Default `medium` (`low` is faster and cheaper) |
 | `IP_LINKS_PER_DAY` | Max sign-in requests per IP per 24 h | Default `15` when unset. Set high in `.dev.vars` so local test runs never trip it. Only a SHA-256 of the IP is ever stored |

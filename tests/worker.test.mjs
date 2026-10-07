@@ -91,6 +91,7 @@ before(async () => {
   await startMock();
   dev = spawn("npx", ["wrangler", "dev", "--port", String(PORT),
     "--var", "ANTHROPIC_API_KEY:test-key",
+    "--var", "IMPORTS_PER_DAY:10",
     "--var", `ANTHROPIC_BASE_URL:http://127.0.0.1:${MOCK_PORT}`], {
     cwd: root, stdio: "pipe", detached: true
   });

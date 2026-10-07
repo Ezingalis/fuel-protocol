@@ -125,3 +125,14 @@ The data model is one blob per user — no relational queries, no realtime, no
 row-level security needed. D1 rides in the same `wrangler deploy`, costs
 nothing at this scale, and the free tier (5 GB / 5M row reads/day) is orders of
 magnitude above what 30 users of diary JSON can generate.
+
+## Program codes
+
+A program can also arrive as an 8-character code (Workout tab → "Have a program
+code?"). The code points at a `shared_plans` row whose JSON is
+`{ "kind": "program", "program": <cleanProgram output> }`; the client coerces it
+through `programDraftFrom()` and opens the same review screen as a PDF import.
+This is how PDFs converted outside the app (for example in a Claude Code chat,
+validated with `program.js`) reach an account without spending the in-app
+import quota. Meal-plan codes and program codes share the table; each import
+box rejects the other kind with a pointer to the right tab.

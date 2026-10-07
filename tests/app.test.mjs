@@ -152,6 +152,25 @@ test("workouts: PDF import is session-gated, size-capped, and rate-limited", () 
   assert.ok(html.includes('id="pdfin"'), "PDF picker missing");
 });
 
+test("programs: in-app imports capped at 1/day; program codes open in the Workout tab", () => {
+  assert.match(wranglerCfg, /"IMPORTS_PER_DAY":\s*"1"/);
+  assert.ok(html.includes('data-act="progcodeimp"'), "program code box missing");
+  assert.ok(html.includes('kind==="program"'), "code import must check it's a program");
+  assert.ok(html.includes("programDraftFrom(pl.program)"), "code imports must be coerced");
+});
+
+test("programs: chat-side conversions use the same gate as the in-app reader", async () => {
+  const { cleanProgram, PROGRAM_SCHEMA } = await import("../program.js");
+  assert.ok(worker.includes('from "./program.js"'), "worker must import the shared program module");
+  assert.ok(PROGRAM_SCHEMA.properties.blocks, "schema missing blocks");
+  const p = cleanProgram({ program: "X", notes: "", total_weeks: 3, blocks: [
+    { label: "Week 1-2", weeks: 2, deload: false, sessions: [{ name: "Day 1", days: [], exercises: [
+      { name: "Squat", muscle: "quadriceps", sets: 3, reps: 5, target: "5 @ RPE 8", lb: 0, rest_sec: 180, notes: "" }] }] }] });
+  assert.equal(p.weeks.length, 3);
+  assert.equal(p.weeks[2].repeated, true);
+  assert.throws(() => cleanProgram({ blocks: [] }), /no_workouts/);
+});
+
 test("programs: week controls exist and every move is undoable", () => {
   for (const act of ["prognext", "progskip", "progback", "progredo", "progrestart", "progend", "progstart", "gimstart"]) {
     assert.ok(html.includes(`"${act}"`), `missing program action ${act}`);
