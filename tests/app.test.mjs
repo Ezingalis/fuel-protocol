@@ -71,6 +71,17 @@ test("app: tab bar steps aside for sheets and the keyboard", () => {
   assert.match(html, /body\.kb \.tabbar/, "focused inputs must hide the tab bar");
 });
 
+test("design: dark mode, self-hosted font, no emoji icons or em-dashes in UI copy", () => {
+  assert.match(html, /@media \(prefers-color-scheme:dark\)/, "dark-mode tokens missing");
+  assert.ok(existsSync(join(root, "public/fonts/Geist-Variable.woff2")), "Geist font file missing");
+  assert.match(html, /url\("\/fonts\/Geist-Variable\.woff2"\)/, "font must be self-hosted");
+  const script = html.slice(html.indexOf("<script>"))
+    .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.doesNotMatch(script, /\u2014|\\u2014/, "em-dash in UI strings");
+  assert.doesNotMatch(script, /[\u{1F300}-\u{1FAFF}]|\\ud83d/u, "emoji used as an icon");
+  assert.ok(html.includes("function IC("), "icon helper missing");
+});
+
 test("app: undo toast wired up", () => {
   assert.ok(html.includes('id="toast"'), "toast container missing");
   assert.ok(html.includes('data-act="undo"'), "undo action missing");
