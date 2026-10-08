@@ -82,6 +82,13 @@ test("design: dark mode, self-hosted font, no emoji icons or em-dashes in UI cop
   assert.ok(html.includes("function IC("), "icon helper missing");
 });
 
+test("design: appearance setting can force light or dark", () => {
+  assert.match(html, /:root\[data-theme="dark"\]/, "forced-dark tokens missing");
+  assert.match(html, /:root:not\(\[data-theme="light"\]\)/, "system dark must yield to a forced light choice");
+  for (const v of ["auto", "light", "dark"]) assert.ok(html.includes('data-act="theme" data-v="\'+o[0]+\'"') || html.includes(`"${v}"`), `theme option ${v} missing`);
+  assert.ok(html.includes('localStorage.getItem("fuelprotocol:theme")'), "theme must apply before first render");
+});
+
 test("app: undo toast wired up", () => {
   assert.ok(html.includes('id="toast"'), "toast container missing");
   assert.ok(html.includes('data-act="undo"'), "undo action missing");
