@@ -479,7 +479,7 @@ function freshDB(){return{
   profile:{sex:"m",age:34,heightIn:70,weightLb:180,activity:1.55,goalRate:1,calMode:"auto",calCustom:2300,
            macroMode:"g",pT:180,cT:250,fT:65,pP:32,cP:44,fP:24,waterGoal:8},
   log:{},favs:[],custom:[],recipes:[],plans:[],applies:[],recents:[],freq:{},
-  gym:{week:{},routines:[],logs:{},prs:{},programs:[],active:null},updatedAt:0
+  gym:{week:{},routines:[],logs:{},prs:{},programs:[],active:null,plan:{}},updatedAt:0
 };}
 var DB=freshDB();
 function normalize(){
@@ -493,7 +493,7 @@ function normalize(){
   ["favs","custom","recipes","plans","applies","recents"].forEach(function(k){if(!DB[k])DB[k]=[];});
   if(!DB.gym)DB.gym={week:{},routines:[],logs:{},prs:{}};
   ["routines","programs"].forEach(function(k){if(!DB.gym[k])DB.gym[k]=[];});
-  ["week","logs","prs"].forEach(function(k){if(!DB.gym[k])DB.gym[k]={};});
+  ["week","logs","prs","plan"].forEach(function(k){if(!DB.gym[k])DB.gym[k]={};});
   if(DB.gym.active===undefined)DB.gym.active=null;
   /* v5.1: single daily weight became timestamped weigh-ins */
   Object.keys(DB.log||{}).forEach(function(ds){var d=DB.log[ds];if(!d)return;
@@ -873,6 +873,10 @@ function renderDiary(){
   }else if(ghl){
     h+='<div class="card"><div class="mealhd"><span class="mt">Workout</span><span class="mcal" style="color:var(--amber)">in progress</span></div>'+
        '<div class="mealfoot"><button class="addbtn" data-act="gymstart" data-d="'+V.date+'">Resume '+esc(ghl.name)+'</button></div></div>';
+  }else if(planFor(V.date)){
+    var ghf=planFor(V.date);
+    h+='<div class="card"><div class="mealhd"><span class="mt">Workout</span><span class="mcal">Scheduled</span></div>'+
+       '<div class="mealfoot"><button class="addbtn" data-act="gymstart" data-d="'+V.date+'" data-src="plan">Start '+esc(ghf.ses.name)+' · Week '+(ghf.w+1)+'</button></div></div>';
   }else if(V.date===todayStr()&&progState()&&!progState().complete&&!progState().weekDone){
     var ghp=progState(),ghs=ghp.wk.sessions[ghp.next];
     h+='<div class="card"><div class="mealhd"><span class="mt">Workout</span><span class="mcal">Week '+(ghp.a.w+1)+'</span></div>'+
@@ -1032,21 +1036,32 @@ function progChange(msg,fn){
 }
 /* open (or create) the day's workout log. src: "prog" (session s of the active
    program's current week), "routine" (today's weekday routine), or auto */
+/* a log built from one program session; marks the program only if it is the active one */
+function progLog(p,w,si){
+  var ses=p&&p.weeks[w]&&p.weeks[w].sessions[si];
+  if(!ses)return null;
+  var log={rid:null,prog:{pid:p.id,w:w,s:si},name:ses.name+" · Week "+(w+1),ex:[],t0:Date.now(),t1:0};
+  ses.ex.forEach(function(e){
+    var last=lastSets(e.n),sets=[];
+    for(var i=0;i<(e.sets||3);i++){var ls=last&&last[Math.min(i,last.length-1)];
+      sets.push({reps:e.reps||10,lb:e.lb>0?e.lb:(ls?(ls.lb||0):0),done:false});}
+    log.ex.push({n:e.n,m:e.m,sets:sets,target:e.target||"",rest:e.rest||0,notes:e.notes||""});
+  });
+  return log;
+}
+function planFor(ds){var pl=DB.gym.plan[ds],p=pl&&progById(pl.pid);
+  return p&&p.weeks[pl.w]&&p.weeks[pl.w].sessions[pl.s]?{p:p,w:pl.w,s:pl.s,ses:p.weeks[pl.w].sessions[pl.s]}:null;}
+/* open (or create) the day's workout log. src: "plan" (scheduled for that date), "prog" (session s of
+   the active program's current week), "routine" (the weekday routine), or auto in that order */
 function gymOpenLog(ds,src,s){
   var g=DB.gym,log=g.logs[ds];
   if(!log){
-    var ps=progState();
-    if(!src)src=(ps&&!ps.complete&&!ps.weekDone)?"prog":"routine";
-    if(src==="prog"&&ps&&!ps.complete){
-      var si=(s>=0&&s<ps.wk.sessions.length)?s:ps.next,ses=ps.wk.sessions[si];
-      if(!ses)return;
-      log={rid:null,prog:{pid:ps.p.id,w:ps.a.w,s:si},name:ses.name+" · Week "+(ps.a.w+1),ex:[],t0:Date.now(),t1:0};
-      ses.ex.forEach(function(e){
-        var last=lastSets(e.n),sets=[];
-        for(var i=0;i<(e.sets||3);i++){var ls=last&&last[Math.min(i,last.length-1)];
-          sets.push({reps:e.reps||10,lb:e.lb>0?e.lb:(ls?(ls.lb||0):0),done:false});}
-        log.ex.push({n:e.n,m:e.m,sets:sets,target:e.target||"",rest:e.rest||0,notes:e.notes||""});
-      });
+    var ps=progState(),pf=planFor(ds);
+    if(!src)src=pf?"plan":(ps&&!ps.complete&&!ps.weekDone)?"prog":"routine";
+    if(src==="plan"&&pf){log=progLog(pf.p,pf.w,pf.s);delete g.plan[ds];}
+    else if(src==="prog"&&ps&&!ps.complete){
+      log=progLog(ps.p,ps.a.w,(s>=0&&s<ps.wk.sessions.length)?s:ps.next);
+      if(!log)return;
     }else{
       var rt=gymRoutineById(g.week[String(wdOf(ds))]);
       log={rid:rt?rt.id:null,name:rt?rt.name:"Workout",ex:[],t0:Date.now(),t1:0};
@@ -1060,6 +1075,45 @@ function gymOpenLog(ds,src,s){
     g.logs[ds]=log;save();
   }
   V.sheet={kind:"gymlog",ds:ds};render();
+}
+/* schedule sheet: one session, or a whole week laid out from a start date */
+function dayLabel(ds){var t=todayStr();if(ds===t)return "Today";if(ds===dateAdd(t,1))return "Tomorrow";if(ds===dateAdd(t,-1))return "Yesterday";
+  var f=fmtDate(ds);return f.wd.slice(0,3)+" "+f.md;}
+function schedMap(sh){
+  var p=progById(sh.pid),wk=p&&p.weeks[sh.w];if(!wk)return [];
+  if(sh.s>=0)return [{s:sh.s,ses:wk.sessions[sh.s],ds:sh.start}];
+  return wk.sessions.map(function(ses,i){return{s:i,ses:ses,ds:dateAdd(sh.start,i*sh.gap)};});
+}
+function progSchedBody(){
+  var sh=V.sheet,p=progById(sh.pid);
+  if(!p)return '<div class="empty">Program not found.</div>';
+  var map=schedMap(sh),h='';
+  h+='<div class="sub" style="margin-top:0">'+esc(p.name)+'</div>';
+  if(sh.b>sh.a){
+    h+='<div class="flabel">Which week</div><div class="chips" style="margin-top:4px">';
+    for(var w=sh.a;w<=sh.b;w++)h+='<button class="chip'+(sh.w===w?" on":"")+'" data-act="schedweek" data-v="'+w+'">Week '+(w+1)+'</button>';
+    h+='</div>';
+  }
+  h+='<div class="flabel">'+(sh.s>=0?"On":"Starting")+'</div>'+
+     '<div class="datenav" style="margin-top:4px"><button class="dn" data-act="schedprev" aria-label="Earlier">'+IC("caretl")+'</button>'+
+     '<div class="dt">'+dayLabel(sh.start)+'<span class="sm">'+fmtDate(sh.start).wd+', '+fmtDate(sh.start).md+'</span></div>'+
+     '<button class="dn" data-act="schednext" aria-label="Later">'+IC("caretr")+'</button></div>';
+  if(sh.s<0)h+='<div class="chips"><button class="chip'+(sh.gap===1?" on":"")+'" data-act="schedgap" data-v="1">Back to back</button>'+
+     '<button class="chip'+(sh.gap===2?" on":"")+'" data-act="schedgap" data-v="2">Rest day between</button></div>';
+  h+='<div class="card" style="margin-top:14px;padding:6px 16px">';
+  var skip=0;
+  map.forEach(function(m){
+    var busy=!!DB.gym.logs[m.ds],prev=planFor(m.ds);if(busy)skip++;
+    h+='<div class="kv"><span>'+esc(m.ses.name)+'<br><span class="ls">'+m.ses.ex.length+' exercises</span></span>'+
+       '<span style="text-align:right"><b>'+dayLabel(m.ds)+'</b>'+
+       (busy?'<br><span class="ls" style="color:var(--amber)">already has a workout, skipped</span>':
+        prev?'<br><span class="ls">replaces '+esc(prev.ses.name)+'</span>':'')+'</span></div>';
+  });
+  h+='</div>';
+  var n=map.length-skip;
+  h+='<div class="sfoot">'+(n?'<button class="bigbtn" data-act="schedgo">'+IC("plans")+'Add '+(n===1?"to calendar":n+" workouts to calendar")+'</button>':
+     '<div class="warn">Those days already have workouts. Pick another date.</div>')+'</div>';
+  return h;
 }
 /* group consecutive identical weeks ("Week 1-2" blocks) into one row each */
 function weekBlocks(weeks){
@@ -1087,7 +1141,7 @@ function targetText(e){
   return t.replace(/\s*·\s*$/,"");
 }
 /* collapsible week-by-week view, shared by import review and program details */
-function weeksTL(weeks,open,curW){
+function weeksTL(weeks,open,curW,pid){
   var h='';
   weekBlocks(weeks).forEach(function(bk){
     var on=!!open[bk.a],nx=0,t=blockTitle(bk),now=curW>=bk.a&&curW<=bk.b;
@@ -1098,8 +1152,10 @@ function weeksTL(weeks,open,curW){
        (bk.repeated?' · copied from the week before':'')+'</span></span><span class="chev">'+(on?IC("caretu"):IC("caretd"))+'</span></button>';
     if(on){
       h+='<div class="ses">';
-      bk.w.sessions.forEach(function(s){
-        h+='<div class="sh"><span>'+esc(s.name)+'</span><span class="ls">'+s.ex.length+' exercises</span></div>';
+      if(pid)h+='<button class="pillbtn ghost" style="width:100%;margin-top:12px" data-act="wksched" data-pid="'+pid+'" data-a="'+bk.a+'" data-b="'+bk.b+'" data-s="-1">'+IC("plans")+'Schedule this week</button>';
+      bk.w.sessions.forEach(function(s,si){
+        h+='<div class="sh"><span>'+esc(s.name)+'</span>'+(pid?'<button class="textbtn" style="padding:0;font-size:13px;color:var(--green2)" data-act="wksched" data-pid="'+pid+'" data-a="'+bk.a+'" data-b="'+bk.b+'" data-s="'+si+'">'+IC("plans")+'Schedule</button>':
+           '<span class="ls">'+s.ex.length+' exercises</span>')+'</div>';
         s.ex.forEach(function(e){
           var meta=[targetText(e),restText(e)].filter(Boolean).join(" · ");
           h+='<div class="exr"><span class="en">'+esc(e.n)+'</span><span class="sr">'+e.sets+' × '+e.reps+(e.lb>0?' · '+e.lb+' lb':'')+'</span>'+
@@ -1174,7 +1230,7 @@ function progViewBody(){
   var a=DB.gym.active,on=a&&a.pid===p.id,h='';
   h+=progStats(p);
   if(p.notes)h+='<div class="sub" style="margin-top:14px">'+esc(p.notes)+'</div>';
-  h+='<div class="reshd">Week by week</div>'+weeksTL(p.weeks,sh.open,on?a.w:-1);
+  h+='<div class="reshd">Week by week</div>'+weeksTL(p.weeks,sh.open,on?a.w:-1,p.id);
   if(!on){
     var cur=a&&progById(a.pid);
     h+='<div class="sfoot"><button class="bigbtn" data-act="progstart" data-id="'+p.id+'">'+IC("play")+'Start this program</button>'+
@@ -1203,7 +1259,14 @@ function renderGym(){
   h+='<div class="card">';
   var phead=function(){return '<div class="row" style="justify-content:space-between;gap:8px"><span class="ls" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(ps.p.name)+'</span>'+
     '<span class="tag" style="margin:0;flex:0 0 auto">Week '+Math.min(ps.a.w+1,ps.p.weeks.length)+' of '+ps.p.weeks.length+'</span></div>';};
-  if(!log&&ps&&ps.complete){
+  var pft=!log&&planFor(today);
+  if(pft){
+    h+='<div class="row" style="justify-content:space-between;gap:8px"><span class="ls" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(pft.p.name)+'</span>'+
+       '<span class="tag" style="margin:0;flex:0 0 auto">Scheduled</span></div>'+
+       '<div class="h1" style="margin-top:10px">'+esc(pft.ses.name)+'<span class="ls" style="font-weight:500;font-size:15px"> · Week '+(pft.w+1)+'</span></div>'+
+       '<div class="sub" style="margin-top:4px">'+pft.ses.ex.length+' exercises</div>'+
+       '<button class="bigbtn" data-act="gymstart" data-d="'+today+'" data-src="plan">'+IC("play")+'Start '+esc(pft.ses.name)+'</button>';
+  }else if(!log&&ps&&ps.complete){
     h+=phead()+'<div class="h1" style="margin-top:10px;display:flex;align-items:center;gap:8px">'+IC("trophy")+'Program complete</div>'+
        '<div class="sub" style="margin-top:4px">All '+ps.p.weeks.length+' weeks done.</div>'+
        '<button class="bigbtn" data-act="progrestart">'+IC("redo")+'Run it again from Week 1</button>'+
@@ -1260,12 +1323,23 @@ function renderGym(){
        '<div class="row" style="justify-content:space-between;margin-top:8px"><span class="fnote" style="margin:0">Missed a day? Just do the next session. Every change here can be undone.</span>'+
        '<button class="textbtn danger" style="flex:0 0 auto" data-act="progend">End program</button></div></div>';
   }
+  /* scheduled sessions ahead */
+  var up=Object.keys(g.plan).filter(function(ds){return ds>=today&&planFor(ds)&&!g.logs[ds];}).sort();
+  if(up.length){
+    h+='<div class="card"><div class="mealhd"><span class="mt">Coming up</span><span class="mcal">'+up.length+' scheduled</span></div>';
+    up.slice(0,7).forEach(function(ds){var pf=planFor(ds);
+      h+='<div class="lrow"><span class="grow"><span class="ln">'+esc(pf.ses.name)+' <span class="ls">· Week '+(pf.w+1)+'</span></span><br>'+
+         '<span class="ls">'+dayLabel(ds)+' · '+esc(pf.p.name)+'</span></span>'+
+         '<button class="sx" data-act="planrm" data-d="'+ds+'" aria-label="Remove from calendar">'+IC("x")+'</button></div>';});
+    if(up.length>7)h+='<div class="fnote">'+(up.length-7)+' more after that.</div>';
+    h+='</div>';
+  }
   /* the week */
   h+='<div class="card"><div class="eyebrow">Your week</div><div class="wkstrip" style="margin-top:10px">';
   for(var wi=0;wi<7;wi++){
     var ds2=dateAdd(today,wi-wd),rr=gymRoutineById(g.week[String(wi)]);
     var done=g.logs[ds2]&&g.logs[ds2].t1;
-    h+='<div class="wk'+(wi===wd?" cur":"")+(done?" done":"")+'"><span>'+WDL[wi]+'</span><i>'+(done?IC("check"):(rr?esc(rr.name.charAt(0).toUpperCase()):""))+'</i></div>';
+    h+='<div class="wk'+(wi===wd?" cur":"")+(done?" done":"")+'"><span>'+WDL[wi]+'</span><i>'+(done?IC("check"):(planFor(ds2)&&!g.logs[ds2]?IC("gym"):(rr?esc(rr.name.charAt(0).toUpperCase()):"")))+'</i></div>';
   }
   h+='</div></div>';
   /* muscles trained, last 7 days */
@@ -1820,7 +1894,7 @@ function sheetBody(){
     k==="copy"?copyBody():k==="planview"?planViewBody():k==="planbuild"?planBuildBody():
     k==="pbpick"?pbPickBody():k==="clearplan"?clearPlanBody():
     k==="gymlog"?gymLogBody():k==="gympick"?gymPickBody():k==="gymroutine"?gymRoutineBody():
-    k==="gymimport"?gymImportBody():k==="progview"?progViewBody():"";
+    k==="gymimport"?gymImportBody():k==="progview"?progViewBody():k==="progsched"?progSchedBody():"";
 }
 
 /* -------------- main render -------------- */
@@ -1839,7 +1913,7 @@ function render(){
     var titles={add:"Add to "+(V.sheet.target?MEALS[V.sheet.target.meal]||"recipe":""),entry:"Edit food",recipe:(V.sheet.editingId?"Edit recipe":"New recipe"),logrecipe:"Log recipe",applyplan:"Log full plan",cal:"Jump to a date",copy:"Copy a meal",
       planview:(planById(V.sheet.pid)||{}).name||"Plan",planbuild:(V.sheet.editingId?"Edit plan":"Create a meal plan"),pbpick:"Add to Day "+((V.sheet.dayIdx||0)+1),clearplan:"Remove plan foods",
       gymlog:(DB.gym.logs[V.sheet.ds]||{}).name||"Workout",gympick:"Add exercise",gymroutine:(V.sheet.editingId?"Edit routine":"New routine"),
-      gymimport:(V.sheet.stage==="reading"?"Importing":"Review program"),progview:(progById(V.sheet.pid)||{}).name||"Program"};
+      gymimport:(V.sheet.stage==="reading"?"Importing":"Review program"),progview:(progById(V.sheet.pid)||{}).name||"Program",progsched:(V.sheet.s>=0?"Schedule a day":"Schedule a week")};
     h+=sheetHTML(sheetBody(),titles[V.sheet.kind]||"",sheetSizeClass());
   }
   el.innerHTML=h;
@@ -1979,6 +2053,7 @@ document.addEventListener("click",function(ev){
   else if(act==="undo"){
     if(UNDO.items){
       if(UNDO.gym!=null){DB.gym.active=JSON.parse(UNDO.gym);}
+      if(UNDO.gymPlan!=null){DB.gym.plan=JSON.parse(UNDO.gymPlan);}
       UNDO.items.forEach(function(it){var L=day(it.date).meals[it.meal];L.splice(Math.min(it.index,L.length),0,it.entry);});
       if(UNDO.rec&&!(DB.applies||[]).some(function(a){return a.id===UNDO.rec.id;}))planApplies().unshift(UNDO.rec);
       save();hideUndo();render();}}
@@ -2248,6 +2323,22 @@ document.addEventListener("click",function(ev){
   else if(act==="progstart"){var pst=progById(el.getAttribute("data-id"));V.sheet=null;
     if(pst)progChange("Started “"+pst.name+"” · Week 1",function(){
       DB.gym.active={pid:pst.id,w:0,done:{},started:todayStr(),hist:[{a:"start",w:0,at:Date.now()}]};});}
+  else if(act==="wksched"){
+    var sa=+el.getAttribute("data-a"),sb2=+el.getAttribute("data-b"),ssi=+el.getAttribute("data-s");
+    var sact=DB.gym.active,sw=(sact&&sact.pid===el.getAttribute("data-pid")&&sact.w>=sa&&sact.w<=sb2)?sact.w:sa;
+    V.sheet={kind:"progsched",back:V.sheet,pid:el.getAttribute("data-pid"),a:sa,b:sb2,w:sw,s:ssi,start:todayStr(),gap:1};render();}
+  else if(act==="schedprev"||act==="schednext"){V.sheet.start=dateAdd(V.sheet.start,act==="schednext"?1:-1);rerenderSheet();}
+  else if(act==="schedgap"){V.sheet.gap=+el.getAttribute("data-v");rerenderSheet();}
+  else if(act==="schedweek"){V.sheet.w=+el.getAttribute("data-v");rerenderSheet();}
+  else if(act==="schedgo"){
+    var ssh=V.sheet,snap=JSON.stringify(DB.gym.plan),sn=0;
+    schedMap(ssh).forEach(function(m){if(DB.gym.logs[m.ds])return;DB.gym.plan[m.ds]={pid:ssh.pid,w:ssh.w,s:m.s};sn++;});
+    save();V.sheet=null;V.tab="gym";render();
+    showUndo("Scheduled "+(sn===1?"1 workout":sn+" workouts")+" from "+dayLabel(ssh.start),[]);UNDO.gymPlan=snap;}
+  else if(act==="planrm"){
+    var prd=el.getAttribute("data-d"),psnap=JSON.stringify(DB.gym.plan),pfx=planFor(prd);
+    delete DB.gym.plan[prd];save();render();
+    showUndo("Removed "+(pfx?pfx.ses.name:"workout")+" from "+dayLabel(prd),[]);UNDO.gymPlan=psnap;}
   else if(act==="progdel"){var pdid=el.getAttribute("data-id");
     DB.gym.programs=DB.gym.programs.filter(function(p){return p.id!==pdid;});save();V.sheet=null;render();}
   else if(act==="prognext"){progChange("Moved to the next week",function(){var a=DB.gym.active;a.hist.push({a:"next",w:a.w,at:Date.now()});a.w++;});}
@@ -2326,16 +2417,16 @@ function syncPBName(){var n=document.getElementById("pbname");if(n&&V.sheet&&V.s
 function pbRenumber(){if(V.sheet&&V.sheet.draft)V.sheet.draft.days.forEach(function(pd,i){pd.name="Day "+(i+1);});}
 function closeSheet(){if(V.sheet&&V.sheet.back){V.sheet=V.sheet.back;render();}else{V.sheet=null;render();}}
 /* undo toast — one shot, restores exactly what was removed */
-var UNDO={items:null,rec:null,gym:null,timer:null};
+var UNDO={items:null,rec:null,gym:null,gymPlan:null,timer:null};
 function showUndo(msg,items,rec){
-  UNDO.items=items||null;UNDO.rec=rec||null;UNDO.gym=null;clearTimeout(UNDO.timer);
+  UNDO.items=items||null;UNDO.rec=rec||null;UNDO.gym=null;UNDO.gymPlan=null;clearTimeout(UNDO.timer);
   var t=document.getElementById("toast"),m=document.getElementById("toastmsg");
   if(m)m.textContent=msg;if(t)t.classList.add("show");
   var ub=t?t.querySelector('[data-act="undo"]'):null;
   if(ub)ub.style.display=items?"":"none";
   UNDO.timer=setTimeout(hideUndo,6000);
 }
-function hideUndo(){UNDO.items=null;UNDO.rec=null;UNDO.gym=null;var t=document.getElementById("toast");if(t)t.classList.remove("show");}
+function hideUndo(){UNDO.items=null;UNDO.rec=null;UNDO.gym=null;UNDO.gymPlan=null;var t=document.getElementById("toast");if(t)t.classList.remove("show");}
 function pvShare(){
   var pl=planById(V.sheet.pid);
   if(!pl||pl.builtin)return;

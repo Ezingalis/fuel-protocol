@@ -89,6 +89,15 @@ test("design: appearance setting can force light or dark", () => {
   assert.ok(html.includes('localStorage.getItem("fuelprotocol:theme")'), "theme must apply before first render");
 });
 
+test("programs: any week or single day can be scheduled onto dates, undoably", () => {
+  for (const act of ["wksched", "schedgo", "schedprev", "schednext", "schedgap", "planrm"]) {
+    assert.ok(html.includes(`"${act}"`), `missing schedule action ${act}`);
+  }
+  assert.ok(html.includes("plan:{}"), "gym.plan missing from freshDB");
+  assert.ok(html.includes('data-src="plan"'), "scheduled sessions must be startable");
+  assert.ok(html.includes("UNDO.gymPlan=snap"), "scheduling must be undoable");
+});
+
 test("app: undo toast wired up", () => {
   assert.ok(html.includes('id="toast"'), "toast container missing");
   assert.ok(html.includes('data-act="undo"'), "undo action missing");
