@@ -136,3 +136,14 @@ This is how PDFs converted outside the app (for example in a Claude Code chat,
 validated with `program.js`) reach an account without spending the in-app
 import quota. Meal-plan codes and program codes share the table; each import
 box rejects the other kind with a pointer to the right tab.
+
+## Installable + offline (PWA)
+
+`public/manifest.webmanifest` plus PNG icons and per-iPhone launch screens in
+`public/icons/` make "Add to Home Screen" install Fuel as a full-screen app.
+`public/sw.js` caches the app shell (page, font, icons) and the exercise
+library, serving the page network-first so updates arrive on the next open.
+It never caches `/api/*` or any non-GET request: diary data stays in
+localStorage + `/api/state`. When the connection returns (`online` event, or
+the app coming back to the foreground after a failed sync) the page calls
+`pullState()`, which pushes local changes if they're newer.

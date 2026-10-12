@@ -13,7 +13,24 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Fuel">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%2300A66C'/%3E%3Cpath fill='%23fff' d='M13.2 3.5 5.8 13.4h4.7l-.9 7.1 7.6-9.9h-4.9l.9-7.1z'/%3E%3C/svg%3E">
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%2300A66C'/%3E%3Cpath fill='%23fff' d='M13.2 3.5 5.8 13.4h4.7l-.9 7.1 7.6-9.9h-4.9l.9-7.1z'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-startup-image" href="/icons/splash-1320x2868-light.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)">
+<link rel="apple-touch-startup-image" href="/icons/splash-1320x2868-dark.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)">
+<link rel="apple-touch-startup-image" href="/icons/splash-1206x2622-light.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)">
+<link rel="apple-touch-startup-image" href="/icons/splash-1206x2622-dark.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)">
+<link rel="apple-touch-startup-image" href="/icons/splash-1290x2796-light.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)">
+<link rel="apple-touch-startup-image" href="/icons/splash-1290x2796-dark.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)">
+<link rel="apple-touch-startup-image" href="/icons/splash-1179x2556-light.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)">
+<link rel="apple-touch-startup-image" href="/icons/splash-1179x2556-dark.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)">
+<link rel="apple-touch-startup-image" href="/icons/splash-1170x2532-light.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)">
+<link rel="apple-touch-startup-image" href="/icons/splash-1170x2532-dark.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)">
+<link rel="apple-touch-startup-image" href="/icons/splash-1284x2778-light.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)">
+<link rel="apple-touch-startup-image" href="/icons/splash-1284x2778-dark.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)">
+<link rel="apple-touch-startup-image" href="/icons/splash-1125x2436-light.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: light)">
+<link rel="apple-touch-startup-image" href="/icons/splash-1125x2436-dark.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)">
+<link rel="apple-touch-startup-image" href="/icons/splash-750x1334-light.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: light)">
+<link rel="apple-touch-startup-image" href="/icons/splash-750x1334-dark.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: dark)">
 <style>
 @font-face{font-family:"Geist";src:url("/fonts/Geist-Variable.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:swap}
 /* Design tokens. Radius rule: containers 20px, controls 12px, chips + tags full pill.
@@ -544,7 +561,9 @@ function syncLabel(){
   return{idle:"",pending:"Saving\u2026",saving:"Saving\u2026",saved:"All changes saved",
     error:"Couldn\u2019t save to your account. Will retry",offline:"Offline. Saved on this device"}[AUTH.sync]||"";
 }
-function paintSync(){var el=document.getElementById("syncdot");if(!el)return;
+function isOffline(){return !navigator.onLine||AUTH.sync==="offline";}
+function paintSync(){var on=document.getElementById("offnote");if(on)on.style.display=isOffline()?"block":"none";
+  var el=document.getElementById("syncdot");if(!el)return;
   el.textContent=syncLabel();
   el.style.color=AUTH.sync==="error"?"var(--bad)":(AUTH.sync==="offline"?"var(--amber)":"var(--faint)");}
 function pullState(){
@@ -794,6 +813,7 @@ function renderDiary(){
   var left=T.cal-tot.cal,over=left<0;
   var f=fmtDate(V.date),isToday=V.date===todayStr();
   var h='<div class="wrap">';
+  h+='<div id="offnote" class="warn" style="margin:0 0 10px;display:'+(isOffline()?'block':'none')+'">You\u2019re offline. Everything you log saves on this phone and syncs when you\u2019re back online.</div>';
   h+='<div class="top" style="margin-top:6px"><button class="daytitle" data-act="opencal">'+(isToday?"Today":f.wd)+'<span class="caret">'+IC("caretd")+'</span></button>'+
      '<div class="row">'+(isToday?'':'<button class="todaychip" data-act="datetoday">Today</button>')+
      '<button class="dn" data-act="dateprev" style="width:34px;height:34px;border-radius:11px;background:var(--card);border:1px solid var(--line);color:var(--sub)">'+IC("caretl")+'</button>'+
@@ -1625,6 +1645,7 @@ function addSheetBody(){
   else if(q){
     h+='<div class="reshd">Results</div>';
     if(sh.apiBusy)h+='<div class="fnote">Searching FatSecret\u2026</div>';
+    if(sh.apiOffline&&!sh.apiBusy)h+='<div class="fnote">You\u2019re offline, so this shows your saved foods and the built-in list. Online search comes back with your connection.</div>';
     /* order: my saved foods first, then FatSecret, then the built-in library */
     var ql=q.toLowerCase(),seen={},out=[];
     var take=function(arr){arr.forEach(function(x){var k=foodKey(x);if(!seen[k]){seen[k]=1;out.push(x);}});};
@@ -1948,12 +1969,12 @@ function scheduleApi(){
   clearTimeout(apiTimer);
   var q=(V.sheet&&V.sheet.query||"").trim();
   if(q.length<2){if(V.sheet)V.sheet.apiResults=[];return;}
-  V.sheet.apiBusy=true;
+  V.sheet.apiBusy=true;V.sheet.apiOffline=false;
   apiTimer=setTimeout(function(){
     fetch(API_BASE+"/api/search?q="+encodeURIComponent(q)+"&max=15").then(function(r){return r.json();}).then(function(d){
       if(V.sheet&&V.sheet.kind==="add"&&(V.sheet.query||"").trim()===q){
         V.sheet.apiResults=d.items||[];V.sheet.apiBusy=false;rerenderSheet();}
-    }).catch(function(){if(V.sheet){V.sheet.apiBusy=false;}});
+    }).catch(function(){if(V.sheet&&V.sheet.kind==="add"){V.sheet.apiBusy=false;V.sheet.apiOffline=true;rerenderSheet();}});
   },350);
 }
 /* barcode via ZXing on demand */
@@ -2571,6 +2592,13 @@ document.addEventListener("focusin",function(ev){if(!isTyping(ev.target))return;
   var el=ev.target;setTimeout(function(){try{el.scrollIntoView({block:"center",behavior:"smooth"});}catch(e){}},300);});
 document.addEventListener("focusout",function(){clearTimeout(KB.t);KB.t=setTimeout(function(){
   if(!isTyping(document.activeElement))document.body.classList.remove("kb");},120);});
+/* opens offline from the home screen; data still syncs through /api/state */
+if("serviceWorker" in navigator)window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){});});
+/* back online (or back in the foreground after being offline): reconcile with the server */
+function resync(){if(AUTH.state==="in"&&navigator.onLine)pullState().then(function(){paintSync();render();});}
+window.addEventListener("online",resync);
+window.addEventListener("offline",function(){if(AUTH.state==="in"){AUTH.sync="offline";render();}});
+document.addEventListener("visibilitychange",function(){if(document.visibilityState==="visible"&&(AUTH.sync==="offline"||AUTH.sync==="error"))resync();});
 boot();
 </script>
 </body>

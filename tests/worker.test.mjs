@@ -130,6 +130,16 @@ test("static: root serves the app", async () => {
   assert.match(await r.text(), /Fuel Protocol/);
 });
 
+test("static: service worker and manifest are served", async () => {
+  const sw = await fetch(BASE + "/sw.js");
+  assert.equal(sw.status, 200);
+  assert.match(sw.headers.get("content-type"), /javascript/);
+  const man = await fetch(BASE + "/manifest.webmanifest");
+  assert.equal(man.status, 200);
+  assert.equal((await man.json()).short_name, "Fuel");
+  assert.equal((await fetch(BASE + "/icons/apple-touch-icon.png")).status, 200);
+});
+
 test("api: CORS preflight answered", async () => {
   const r = await fetch(`${BASE}/api/search`, { method: "OPTIONS" });
   assert.equal(r.status, 204);

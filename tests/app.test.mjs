@@ -98,6 +98,28 @@ test("programs: any week or single day can be scheduled onto dates, undoably", (
   assert.ok(html.includes("UNDO.gymPlan=snap"), "scheduling must be undoable");
 });
 
+test("installable: manifest, PNG icons, launch screens, offline worker", () => {
+  const man = JSON.parse(read("public/manifest.webmanifest"));
+  assert.equal(man.display, "standalone");
+  assert.equal(man.start_url, "/");
+  assert.ok(man.icons.some(i => i.purpose === "maskable"), "maskable icon missing");
+  for (const i of man.icons) assert.ok(existsSync(join(root, "public", i.src)), `missing ${i.src}`);
+  assert.match(html, /<link rel="manifest" href="\/manifest\.webmanifest">/);
+  assert.match(html, /<link rel="apple-touch-icon" href="\/icons\/apple-touch-icon\.png">/, "iOS needs a PNG home-screen icon");
+  const splashes = [...html.matchAll(/apple-touch-startup-image" href="([^"]+)"/g)].map(m => m[1]);
+  assert.ok(splashes.length >= 8, "launch screens missing");
+  for (const f of splashes) assert.ok(existsSync(join(root, "public", f)), `missing ${f}`);
+  assert.ok(html.includes('serviceWorker.register("/sw.js")'), "service worker not registered");
+  assert.ok(html.includes('addEventListener("online",resync)'), "must resync when the connection returns");
+});
+
+test("installable: the worker never caches API calls or writes", () => {
+  const sw = read("public/sw.js");
+  assert.match(sw, /url\.pathname\.startsWith\("\/api\/"\)/, "API requests must bypass the cache");
+  assert.match(sw, /req\.method !== "GET"/, "non-GET requests must bypass the cache");
+  assert.match(sw, /caches\.match\("\/"\)/, "app page must open offline");
+});
+
 test("app: undo toast wired up", () => {
   assert.ok(html.includes('id="toast"'), "toast container missing");
   assert.ok(html.includes('data-act="undo"'), "undo action missing");
