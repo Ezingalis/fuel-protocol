@@ -48,3 +48,17 @@ CREATE TABLE IF NOT EXISTS gym_imports (
 );
 
 CREATE INDEX IF NOT EXISTS idx_imports_user ON gym_imports(user_id, created_at);
+
+-- Access requests from people the owner hasn't approved yet. One row per email, ever.
+CREATE TABLE IF NOT EXISTS approvals (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  email       TEXT NOT NULL UNIQUE,
+  token_hash  TEXT NOT NULL UNIQUE,
+  status      TEXT NOT NULL,            -- pending | approved | denied
+  created_at  INTEGER NOT NULL,
+  expires_at  INTEGER NOT NULL,
+  decided_at  INTEGER,
+  ip_hash     TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_approvals_ip ON approvals(ip_hash);

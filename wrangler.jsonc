@@ -13,7 +13,9 @@
   "vars": {
     "MAIL_FROM": "Fuel Protocol <fuel@ethanzingalis.com>",
     // In-app PDF imports per user per 24 h (each one is a paid Claude read)
-    "IMPORTS_PER_DAY": "1"
+    "IMPORTS_PER_DAY": "1",
+    // invite-only: this address signs in directly; anyone new emails it an approve/deny link
+    "OWNER_EMAIL": "ezingalis@gmail.com"
   },
   // Workers AI: free fallback reader for workout PDF import
   "ai": { "binding": "AI" },

@@ -260,7 +260,7 @@ function validEmail(e) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e); }
 
 async function sendMagicEmail(env, email, link) {
   if (!env.RESEND_KEY) return false;
-  const r = await fetch("https://api.resend.com/emails", {
+  const r = await fetch((env.RESEND_BASE_URL || "https://api.resend.com") + "/emails", {
     method: "POST",
     headers: { "Authorization": "Bearer " + env.RESEND_KEY, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -278,6 +278,45 @@ async function sendMagicEmail(env, email, link) {
   });
   return r.ok;
 }
+
+const APPROVAL_DAYS = 7;
+const escHtml = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+async function sendMail(env, to, subject, text, buttonLabel, link, note) {
+  if (!env.RESEND_KEY) return false;
+  const html = '<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:460px;margin:0 auto;padding:28px 4px;color:#0F1419">'
+    + '<div style="font-size:19px;font-weight:700">Fuel Protocol</div>'
+    + '<p style="color:#4F5866;font-size:15px;line-height:1.6">' + escHtml(text) + '</p>'
+    + '<p><a href="' + link + '" style="display:inline-block;background:#0B8A5E;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:13px 22px;border-radius:12px">' + escHtml(buttonLabel) + '</a></p>'
+    + '<p style="color:#6B7482;font-size:12px;line-height:1.6;word-break:break-all">Or paste this into your browser:<br>' + link + '</p>'
+    + (note ? '<p style="color:#6B7482;font-size:12px">' + escHtml(note) + '</p>' : '') + '</div>';
+  const r = await fetch((env.RESEND_BASE_URL || "https://api.resend.com") + "/emails", {
+    method: "POST",
+    headers: { "Authorization": "Bearer " + env.RESEND_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ from: env.MAIL_FROM || "Fuel Protocol <onboarding@resend.dev>", to: [to], subject,
+      text: text + "\n\n" + buttonLabel + ": " + link + (note ? "\n\n" + note : ""), html })
+  });
+  return r.ok;
+}
+function page(title, bodyHtml, code) {
+  return new Response(`<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<title>${title}</title><style>
+:root{color-scheme:light dark;--bg:#F2F3F5;--card:#fff;--ink:#0F1419;--sub:#4F5866;--line:#E3E6EA;--green:#0B8A5E;--bad:#CC3A43}
+@media (prefers-color-scheme:dark){:root{--bg:#0C0E11;--card:#15181D;--ink:#ECEEF2;--sub:#AAB1BC;--line:#272C34;--green:#34D399;--bad:#F26B72}}
+*{box-sizing:border-box}body{margin:0;min-height:100dvh;display:grid;place-items:center;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,sans-serif;padding:16px}
+.c{background:var(--card);border-radius:20px;padding:28px 24px;max-width:420px;width:100%;box-shadow:0 8px 24px -14px rgba(0,0,0,.25)}
+h1{font-size:22px;margin:0 0 8px;letter-spacing:-.02em}p{color:var(--sub);margin:0 0 18px}b{color:var(--ink)}
+form{display:flex;gap:10px}button{flex:1;font:600 16px system-ui;border:0;border-radius:12px;padding:14px;cursor:pointer}
+.ok{background:var(--green);color:#fff}.no{background:transparent;color:var(--bad);box-shadow:inset 0 0 0 1px var(--line)}
+</style></head><body><div class="c">${bodyHtml}</div></body></html>`,
+    { status: code || 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+}
+async function findApproval(db, token) {
+  if (!token) return null;
+  const row = await db.prepare("SELECT id,email,status,expires_at FROM approvals WHERE token_hash=?1").bind(await sha256hex(token)).first();
+  return row && row.status === "pending" && row.expires_at > Date.now() ? row : null;
+}
+const closedPage = () => page("Request closed", "<h1>This request is closed</h1><p>It was already decided or it expired.</p>", 410);
 
 async function authRoute(url, request, env, ctx) {
   const path = url.pathname;
@@ -316,16 +355,34 @@ async function authRoute(url, request, env, ctx) {
     const recent = await db.prepare(
       "SELECT created_at FROM magic_links WHERE email=?1 ORDER BY created_at DESC LIMIT 1"
     ).bind(email).first();
-    if (recent && now - recent.created_at < 60000) return json({ error: "rate" }, 429);
+    if (recent && now - recent.created_at < parseInt(env.LINK_COOLDOWN_SECONDS || "60", 10) * 1000) return json({ error: "rate" }, 429);
 
     /* Per-IP daily cap so a stranger can't burn the email quota.
        Only a hash of the IP is stored; rows are kept 24h for this count. */
     const ipHash = await sha256hex(request.headers.get("CF-Connecting-IP") || "0");
     const ipCap = parseInt(env.IP_LINKS_PER_DAY || "15", 10);
     const used = await db.prepare(
-      "SELECT COUNT(*) AS n FROM magic_links WHERE ip_hash=?1 AND created_at > ?2"
+      "SELECT (SELECT COUNT(*) FROM magic_links WHERE ip_hash=?1 AND created_at > ?2)+(SELECT COUNT(*) FROM approvals WHERE ip_hash=?1 AND created_at > ?2) AS n"
     ).bind(ipHash, now - 864e5).first();
     if (used && used.n >= ipCap) return json({ error: "rate" }, 429);
+
+    /* Invite-only: the owner and people the owner approved get a link. Anyone else
+       asks the owner once; the reply is identical whether pending, new, or denied. */
+    const isOwner = email === normalizeEmail(env.OWNER_EMAIL);
+    if (!isOwner && !(await db.prepare("SELECT id FROM users WHERE email=?1").bind(email).first())) {
+      if (await db.prepare("SELECT id FROM approvals WHERE email=?1").bind(email).first()) return json({ ok: true, pending: true });
+      const today = await db.prepare("SELECT COUNT(*) AS n FROM approvals WHERE created_at > ?1").bind(now - 864e5).first();
+      const at = randomToken();
+      await db.prepare("INSERT INTO approvals (email,token_hash,status,created_at,expires_at,ip_hash) VALUES (?1,?2,'pending',?3,?4,?5)")
+        .bind(email, await sha256hex(at), now, now + APPROVAL_DAYS * 864e5, ipHash).run();
+      if (env.OWNER_EMAIL && (!today || today.n < parseInt(env.APPROVALS_PER_DAY || "10", 10))) {
+        await sendMail(env, env.OWNER_EMAIL, "Approve " + email + " for Fuel Protocol?",
+          email + " wants to use Fuel Protocol. Open the request to approve or deny it.", "Review request",
+          url.origin + "/api/admin/review?t=" + encodeURIComponent(at),
+          "Opening the link changes nothing. You decide on the page. The request expires in " + APPROVAL_DAYS + " days.");
+      }
+      return json({ ok: true, pending: true });
+    }
 
     const token = randomToken();
     await db.prepare(
@@ -355,6 +412,7 @@ async function authRoute(url, request, env, ctx) {
 
     let user = await db.prepare("SELECT id FROM users WHERE email=?1").bind(row.email).first();
     if (!user) {
+      if (row.email !== normalizeEmail(env.OWNER_EMAIL)) return Response.redirect(url.origin + "/?expired=1", 302);
       const id = crypto.randomUUID();
       await db.prepare("INSERT INTO users (id,email,created_at,last_seen) VALUES (?1,?2,?3,?3)")
         .bind(id, row.email, now).run();
@@ -369,6 +427,40 @@ async function authRoute(url, request, env, ctx) {
         "Set-Cookie": sessionCookie(await makeSession(env, user.id), SESSION_DAYS * 86400)
       }
     });
+  }
+
+  if (path === "/api/admin/review" && request.method === "GET") {
+    if (!db) return json({ error: "not_configured" }, 503);
+    const t = url.searchParams.get("t") || "", row = await findApproval(db, t);
+    if (!row) return closedPage();
+    return page("Approve " + row.email, "<h1>Let <b>" + escHtml(row.email) + "</b> use Fuel Protocol?</h1>" +
+      "<p>Approving creates their account and emails them a sign-in link. Denying stops them for good.</p>" +
+      '<form method="post" action="/api/admin/decide"><input type="hidden" name="t" value="' + escHtml(t) + '">' +
+      '<button class="no" name="d" value="deny">Deny</button><button class="ok" name="d" value="approve">Approve</button></form>');
+  }
+
+  if (path === "/api/admin/decide" && request.method === "POST") {
+    if (!db) return json({ error: "not_configured" }, 503);
+    let form;
+    try { form = await request.formData(); } catch (e) { return page("Bad request", "<h1>Something went wrong</h1><p>Open the link from the email again.</p>", 400); }
+    const row = await findApproval(db, String(form.get("t") || ""));
+    if (!row) return closedPage();
+    const now = Date.now();
+    if (form.get("d") !== "approve") {
+      await db.prepare("UPDATE approvals SET status='denied',decided_at=?1 WHERE id=?2").bind(now, row.id).run();
+      return page("Denied", "<h1>Denied</h1><p><b>" + escHtml(row.email) + "</b> can't sign in. They aren't told anything.</p>");
+    }
+    await db.prepare("UPDATE approvals SET status='approved',decided_at=?1 WHERE id=?2").bind(now, row.id).run();
+    if (!(await db.prepare("SELECT id FROM users WHERE email=?1").bind(row.email).first()))
+      await db.prepare("INSERT INTO users (id,email,created_at,last_seen) VALUES (?1,?2,?3,?3)").bind(crypto.randomUUID(), row.email, now).run();
+    const tok = randomToken();
+    await db.prepare("INSERT INTO magic_links (token_hash,email,created_at,expires_at) VALUES (?1,?2,?3,?4)")
+      .bind(await sha256hex(tok), row.email, now, now + LINK_MINUTES * 60000).run();
+    const sent = await sendMail(env, row.email, "You're in: Fuel Protocol",
+      "You've been approved for Fuel Protocol. Tap the button to sign in. It works once and expires in " + LINK_MINUTES + " minutes. After that, request a new link from the app any time.",
+      "Sign in", url.origin + "/api/auth/verify?token=" + encodeURIComponent(tok), "");
+    return page("Approved", "<h1>Approved</h1><p><b>" + escHtml(row.email) + "</b> can use Fuel Protocol now." +
+      (sent ? " They've been emailed a sign-in link." : " The sign-in email didn't send, so ask them to request a new link from the app.") + "</p>");
   }
 
   if (path === "/api/auth/logout") {

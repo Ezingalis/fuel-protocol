@@ -604,7 +604,8 @@ function sendLink(){
    .then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j};});})
    .then(function(res){
      AUTH.busy=false;
-     if(res.ok){AUTH.sent=true;AUTH.devLink=res.j.devLink||"";}
+     if(res.ok&&res.j.pending){AUTH.pending=true;}
+     else if(res.ok){AUTH.sent=true;AUTH.devLink=res.j.devLink||"";}
      else AUTH.err=res.j.error==="rate"?"A link was just sent. Check your email or wait a minute.":"Couldn\u2019t send the link. Try again.";
      render();
    }).catch(function(){AUTH.busy=false;AUTH.err="No connection. Try again when you\u2019re back online.";render();});
@@ -615,7 +616,11 @@ function renderAuth(){
      '<svg width="28" height="28" viewBox="0 0 24 24"><path fill="var(--onAccent)" d="M13.2 3.5 5.8 13.4h4.7l-.9 7.1 7.6-9.9h-4.9l.9-7.1z"/></svg></span>'+
      '<div class="h1" style="font-size:27px;margin-top:14px">Fuel Protocol</div>'+
      '<p class="sub" style="margin-top:6px">Track calories, macros, recipes, and plans. Synced to every device you sign in on.</p></div>';
-  if(AUTH.sent){
+  if(AUTH.pending){
+    h+='<div class="card"><div class="warn" style="margin-top:0;font-weight:600">Request sent.</div>'+
+     '<div class="fnote">Fuel is invite-only. The owner has been asked to approve '+esc(AUTH.email)+'. Once they do, a sign-in link arrives by email.</div>'+
+     '<button class="bigbtn ghost" data-act="authback">Use a different email</button></div>';
+  }else if(AUTH.sent){
     h+='<div class="card"><div class="okline">Check your inbox. A sign-in link is on its way to '+esc(AUTH.email)+'.</div>'+
      '<div class="fnote">The link signs you in for 90 days, works once, and expires in 15 minutes. Nothing in spam? Send another.</div>'+
      '<button class="bigbtn ghost" data-act="authback">Use a different email</button></div>';
@@ -626,7 +631,7 @@ function renderAuth(){
      '<input id="authmail" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" value="'+esc(AUTH.email)+'">'+
      (AUTH.err?'<div class="warn">'+esc(AUTH.err)+'</div>':'')+
      '<button class="bigbtn" data-act="authsend">'+(AUTH.busy?"Sending\u2026":"Email me a sign-in link")+'</button>'+
-     '<div class="fnote">No password to remember. New here? Entering your email creates your account.</div></div>';
+     '<div class="fnote">No password to remember. Fuel is invite-only: if you\u2019re new, entering your email asks the owner for access.</div></div>';
   }
   h+='</div>';return h;
 }
@@ -2062,7 +2067,7 @@ document.addEventListener("click",function(ev){
   var act=el.getAttribute("data-act");
   /* account */
   if(act==="authsend"){sendLink();return;}
-  else if(act==="authback"){AUTH.sent=false;AUTH.devLink="";AUTH.err="";render();return;}
+  else if(act==="authback"){AUTH.sent=false;AUTH.pending=false;AUTH.devLink="";AUTH.err="";render();return;}
   else if(act==="signout"){
     api("/api/auth/logout",{method:"POST"}).catch(function(){}).then(function(){
       try{localStorage.removeItem("fuelprotocol:lastuid");localStorage.removeItem("fuelprotocol:lastemail");}catch(e){}

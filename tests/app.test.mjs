@@ -120,6 +120,13 @@ test("installable: the worker never caches API calls or writes", () => {
   assert.match(sw, /caches\.match\("\/"\)/, "app page must open offline");
 });
 
+test("invite-only: owner configured, only the owner auto-creates an account", () => {
+  assert.match(wranglerCfg, /"OWNER_EMAIL":\s*"[^"@]+@[^"]+"/, "OWNER_EMAIL missing");
+  assert.ok(worker.includes('if (row.email !== normalizeEmail(env.OWNER_EMAIL)) return Response.redirect'), "verify must not create accounts for strangers");
+  assert.ok(worker.includes('return json({ ok: true, pending: true });'), "new people must get the pending reply");
+  assert.ok(html.includes("res.j.pending"), "sign-in screen must show the request-sent state");
+});
+
 test("app: undo toast wired up", () => {
   assert.ok(html.includes('id="toast"'), "toast container missing");
   assert.ok(html.includes('data-act="undo"'), "undo action missing");
@@ -235,8 +242,8 @@ test("programs: week controls exist and every move is undoable", () => {
   assert.ok(html.includes("programs:[],active:null"), "program state missing from freshDB");
 });
 
-test("schema: defines the five tables", () => {
-  for (const t of ["users", "state", "magic_links", "shared_plans", "gym_imports"]) {
+test("schema: defines the six tables", () => {
+  for (const t of ["users", "state", "magic_links", "shared_plans", "gym_imports", "approvals"]) {
     assert.match(schema, new RegExp(`CREATE TABLE IF NOT EXISTS ${t}`), `missing table ${t}`);
   }
 });

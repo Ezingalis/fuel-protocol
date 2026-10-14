@@ -24,7 +24,7 @@ const EMAIL = `test-${Date.now()}@example.com`;
 /* Stand-in for api.anthropic.com so the Claude import path runs end to end
    (Files upload -> streamed Messages call -> file delete) without a real key.
    `MOCK.mode` picks the canned reply for the next Messages call. */
-const MOCK = { mode: "program", uploads: [], messages: [], deletes: [] };
+const MOCK = { mode: "program", uploads: [], messages: [], deletes: [], mail: [] };
 const ex = (o) => Object.assign({ muscle: "chest", sets: 3, reps: 8, target: "", lb: 0, rest_sec: 120, notes: "" }, o);
 const MOCK_PROGRAM = {
   program: "Test Block Program", notes: "Two days a week; loads by %1RM.", total_weeks: 5,
@@ -61,6 +61,11 @@ function startMock() {
     req.on("end", () => {
       const body = Buffer.concat(chunks);
       const path = req.url.split("?")[0];
+      if (req.method === "POST" && path === "/emails") {          // stand-in for Resend
+        MOCK.mail.push(JSON.parse(body.toString()));
+        res.writeHead(200, { "content-type": "application/json" });
+        return res.end('{"id":"mail"}');
+      }
       if (req.method === "POST" && path === "/v1/files") {
         MOCK.uploads.push({ hasPdf: body.includes("%PDF-"), auth: req.headers["x-api-key"] });
         res.writeHead(200, { "content-type": "application/json" });
@@ -91,6 +96,8 @@ before(async () => {
   await startMock();
   dev = spawn("npx", ["wrangler", "dev", "--port", String(PORT),
     "--var", "ANTHROPIC_API_KEY:test-key",
+    "--var", "RESEND_KEY:test", "--var", `RESEND_BASE_URL:http://127.0.0.1:${MOCK_PORT}`,
+    "--var", `OWNER_EMAIL:${EMAIL}`,
     "--var", "IMPORTS_PER_DAY:10",
     "--var", `ANTHROPIC_BASE_URL:http://127.0.0.1:${MOCK_PORT}`], {
     cwd: root, stdio: "pipe", detached: true
@@ -115,11 +122,11 @@ after(() => {
 
 /* ---------- health + static ---------- */
 
-test("health: accounts on (local D1 + dev secret), email/fs off, Claude importer on", async () => {
+test("health: accounts + email on (fake mail server), fs off, Claude importer on", async () => {
   const j = await (await fetch(`${BASE}/api/health`)).json();
   assert.equal(j.ok, true);
   assert.equal(j.accounts, true);
-  assert.equal(j.email, false);
+  assert.equal(j.email, true);
   assert.equal(j.fs, false);
   assert.equal(j.importer, "claude");
 });
@@ -182,15 +189,17 @@ test("auth: invalid email rejected", async () => {
 
 let devLink, cookie;
 
-test("auth: request returns dev link when email is unconfigured", async () => {
-  const r = await fetch(`${BASE}/api/auth/request`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: EMAIL })
-  });
-  const j = await r.json();
-  assert.equal(j.ok, true);
-  assert.ok(j.devLink?.includes("/api/auth/verify?token="), "devLink missing");
-  devLink = j.devLink.replace(/^https?:\/\/[^/]+/, BASE);
+const mailTo = addr => [...MOCK.mail].reverse().find(m => m.to[0] === addr);
+const linkIn = (m, re) => (m.text.match(re) || [])[0];
+const askAccess = email => fetch(`${BASE}/api/auth/request`, {
+  method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email })
+});
+
+test("auth: the owner is emailed a sign-in link", async () => {
+  const j = await (await askAccess(EMAIL)).json();
+  assert.deepEqual(j, { ok: true });
+  devLink = linkIn(mailTo(EMAIL), /https?:\/\/\S+\/api\/auth\/verify\?token=\S+/).replace(/^https?:\/\/[^/]+/, BASE);
+  assert.ok(devLink);
 });
 
 test("auth: immediate second request is rate limited", async () => {
@@ -364,6 +373,51 @@ test("import: a refusal surfaces as an error without retrying elsewhere", async 
   assert.equal(MOCK.messages.length, before + 1);
   assert.equal(MOCK.deletes.length, 2, "file deleted even when the read fails");
   MOCK.mode = "program";
+});
+
+/* ---------- invite-only: new people need the owner's approval ---------- */
+
+const NEWBIE = `newbie-${Date.now()}@example.com`, STRANGER = `stranger-${Date.now()}@example.com`;
+let reviewToken;
+
+test("invite: a new person gets no link; the owner gets one approval email", async () => {
+  const before = MOCK.mail.length;
+  assert.deepEqual(await (await askAccess(NEWBIE)).json(), { ok: true, pending: true });
+  const sent = MOCK.mail.slice(before);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].to[0], EMAIL, "only the owner is emailed");
+  reviewToken = linkIn(sent[0], /\/api\/admin\/review\?t=\S+/).split("t=")[1];
+  assert.deepEqual(await (await askAccess(NEWBIE)).json(), { ok: true, pending: true });
+  assert.equal(MOCK.mail.length, before + 1, "asking again doesn't re-email the owner");
+});
+
+test("invite: opening the review link changes nothing", async () => {
+  const r = await fetch(`${BASE}/api/admin/review?t=${reviewToken}`);
+  assert.equal(r.status, 200);
+  assert.ok((await r.text()).includes(NEWBIE));
+  assert.deepEqual(await (await askAccess(NEWBIE)).json(), { ok: true, pending: true });
+});
+
+test("invite: approve creates the account and emails a working sign-in link", async () => {
+  const r = await fetch(`${BASE}/api/admin/decide`, { method: "POST", body: new URLSearchParams({ t: reviewToken, d: "approve" }) });
+  assert.match(await r.text(), /Approved/);
+  const link = linkIn(mailTo(NEWBIE), /https?:\/\/\S+\/api\/auth\/verify\?token=\S+/).replace(/^https?:\/\/[^/]+/, BASE);
+  const v = await fetch(link, { redirect: "manual" });
+  assert.match(v.headers.get("location"), /signedin=1/);
+  const me = await (await fetch(`${BASE}/api/me`, { headers: { Cookie: v.headers.get("set-cookie").split(";")[0] } })).json();
+  assert.equal(me.email, NEWBIE);
+  const again = await fetch(`${BASE}/api/admin/decide`, { method: "POST", body: new URLSearchParams({ t: reviewToken, d: "approve" }) });
+  assert.equal(again.status, 410, "approval links are single-use");
+});
+
+test("invite: deny locks a stranger out without telling them", async () => {
+  const before = MOCK.mail.length;
+  await askAccess(STRANGER);
+  const t = linkIn(MOCK.mail.slice(before)[0], /\/api\/admin\/review\?t=\S+/).split("t=")[1];
+  assert.match(await (await fetch(`${BASE}/api/admin/decide`, { method: "POST", body: new URLSearchParams({ t, d: "deny" }) })).text(), /Denied/);
+  assert.deepEqual(await (await askAccess(STRANGER)).json(), { ok: true, pending: true });
+  assert.ok(!MOCK.mail.some(m => m.to[0] === STRANGER), "the stranger is never emailed");
+  assert.equal((await fetch(`${BASE}/api/admin/review?t=forged`)).status, 410);
 });
 
 test("logout: clears the cookie", async () => {
