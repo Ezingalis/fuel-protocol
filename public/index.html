@@ -1678,8 +1678,8 @@ function progOptsBody(){
     '<div class="flabel">Jump to</div><select id="progjump">'+ps.p.weeks.map(function(w,i){
       return '<option value="'+i+'"'+(i===ps.a.w?" selected":"")+'>'+esc(weekName(w,i))+'</option>';}).join("")+'</select>';
   if(ids.length&&("caches" in window))h+='<div class="flabel">Videos on this phone</div><div class="ls num">'+(VDL.saved==null?"Checking…":VDL.saved+' of '+ids.length+' saved')+'</div>'+
-    (VDL.saved!=null&&VDL.saved<ids.length?'<button class="bigbtn ghost" data-act="vsave">'+IC("download")+'Save videos for offline</button>':
-     VDL.saved?'<button class="textbtn danger" style="margin-top:6px" data-act="vdrop">'+IC("trash")+'Remove saved videos</button>':'');
+    (VDL.saved!=null&&VDL.saved<ids.length?'<button class="bigbtn ghost" data-act="vsave">'+IC("download")+(VDL.saved?'Save the rest':'Save videos for offline')+'</button>':'')+
+    (VDL.saved?'<button class="textbtn danger" style="margin-top:6px" data-act="vdrop">'+IC("trash")+'Remove saved videos</button>':'');
   return h+'<div class="fnote">Every week change can be undone.</div><div style="text-align:center;margin-top:6px"><button class="textbtn danger" data-act="progend">End program</button></div>';
 }
 var WDL=["S","M","T","W","T","F","S"],WDN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
