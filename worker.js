@@ -8,6 +8,8 @@
      GET  /api/plan/shared?code=  -> { plan }           fetch a shared meal plan (signed-in)
      POST /api/gym/import         -> ndjson: heartbeat newlines, then { ok, engine, program }
                                      reads a workout PDF into routines (signed-in, rate-limited)
+     POST /api/auth/code          -> { ok } + cookie    sign in with the 6-digit code from the email
+     GET  /media/ex/<id>.mp4|jpg  -> exercise demo clip (signed-in, byte ranges)
    Secrets (set in Cloudflare, never in code): FS_KEY, FS_SECRET, ANTHROPIC_API_KEY
 */
 import Anthropic, { toFile } from "@anthropic-ai/sdk";
@@ -258,7 +260,19 @@ function sessionCookie(value, maxAgeSeconds) {
 function normalizeEmail(e) { return String(e || "").trim().toLowerCase(); }
 function validEmail(e) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e); }
 
-async function sendMagicEmail(env, email, link) {
+/* The 6-digit code is derived from the link's stored hash with the session key, so nothing
+   extra is stored and a copy of the database alone can't produce codes. Home Screen apps on
+   iPhone keep their own cookies, so a link opened from Mail signs in Safari, not the app:
+   the code is how you sign in there. */
+async function signInCode(env, tokenHash) {
+  const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(env.SESSION_SECRET),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const b = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode("code:" + tokenHash)));
+  return String((b[0] * 16777216 + b[1] * 65536 + b[2] * 256 + b[3]) % 1e6).padStart(6, "0");
+}
+const CODE_TRIES = 5, CODE_TRIES_PER_DAY = 20;
+
+async function sendMagicEmail(env, email, link, code) {
   if (!env.RESEND_KEY) return false;
   const r = await fetch((env.RESEND_BASE_URL || "https://api.resend.com") + "/emails", {
     method: "POST",
@@ -266,17 +280,35 @@ async function sendMagicEmail(env, email, link) {
     body: JSON.stringify({
       from: env.MAIL_FROM || "Fuel Protocol <onboarding@resend.dev>",
       to: [email],
-      subject: "Your Fuel Protocol sign-in link",
-      text: "Sign in to Fuel Protocol: " + link + "\n\nThis link works once and expires in " + LINK_MINUTES + " minutes. If you didn't ask for it, ignore this email.",
+      subject: "Fuel Protocol sign-in code: " + code,
+      text: "Your Fuel Protocol sign-in code: " + code + "\n\nType it into the app, or tap this link: " + link +
+        "\n\nBoth work once and expire in " + LINK_MINUTES + " minutes. If you didn't ask for this, ignore this email.",
       html: '<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:460px;margin:0 auto;padding:28px 4px;color:#101828">'
         + '<div style="font-size:19px;font-weight:800;letter-spacing:-.02em">Fuel Protocol</div>'
-        + '<p style="color:#667085;font-size:14px;line-height:1.6">Tap the button to sign in. It works once and expires in ' + LINK_MINUTES + ' minutes.</p>'
+        + '<p style="color:#667085;font-size:14px;line-height:1.6">Your sign-in code. Type it into the app:</p>'
+        + '<div style="font-size:34px;font-weight:800;letter-spacing:.3em;font-variant-numeric:tabular-nums;padding:14px 0">' + code + '</div>'
+        + '<p style="color:#667085;font-size:14px;line-height:1.6">Or tap the button. Both work once and expire in ' + LINK_MINUTES + ' minutes.</p>'
         + '<p><a href="' + link + '" style="display:inline-block;background:#00A66C;color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 22px;border-radius:12px">Sign in</a></p>'
-        + '<p style="color:#98A2B3;font-size:12px;line-height:1.6;word-break:break-all">Or paste this into your browser:<br>' + link + '</p>'
-        + '<p style="color:#98A2B3;font-size:12px">Didn\'t request this? You can ignore the email — no account changes were made.</p></div>'
+        + '<p style="color:#98A2B3;font-size:12px;line-height:1.6">Using Fuel from your Home Screen? Use the code: the button opens Safari, not the app.</p>'
+        + '<p style="color:#98A2B3;font-size:12px">Didn\'t request this? You can ignore the email. No account changes were made.</p></div>'
     })
   });
   return r.ok;
+}
+
+/* A used or expired link, or one owned by someone not allowed in, signs no one in.
+   Returns the user id, creating the owner's account on first sign-in. */
+async function finishSignIn(db, env, row, now) {
+  await db.prepare("UPDATE magic_links SET used_at=?1 WHERE token_hash=?2").bind(now, row.token_hash).run();
+  let user = await db.prepare("SELECT id FROM users WHERE email=?1").bind(row.email).first();
+  if (!user) {
+    if (row.email !== normalizeEmail(env.OWNER_EMAIL)) return null;
+    const id = crypto.randomUUID();
+    await db.prepare("INSERT INTO users (id,email,created_at,last_seen) VALUES (?1,?2,?3,?3)").bind(id, row.email, now).run();
+    return id;
+  }
+  await db.prepare("UPDATE users SET last_seen=?1 WHERE id=?2").bind(now, user.id).run();
+  return user.id;
 }
 
 const APPROVAL_DAYS = 7;
@@ -390,8 +422,10 @@ async function authRoute(url, request, env, ctx) {
     ).bind(await sha256hex(token), email, now, now + LINK_MINUTES * 60000, ipHash).run();
     await db.prepare("DELETE FROM magic_links WHERE created_at < ?1").bind(now - 864e5).run();
 
+    await db.prepare("DELETE FROM code_tries WHERE token_hash NOT IN (SELECT token_hash FROM magic_links)").run();
+
     const link = url.origin + "/api/auth/verify?token=" + encodeURIComponent(token);
-    const sent = await sendMagicEmail(env, email, link);
+    const sent = await sendMagicEmail(env, email, link, await signInCode(env, await sha256hex(token)));
     /* Only echo the link back when explicitly enabled for first-run testing. */
     if (!sent && env.ALLOW_DEV_LINK === "1") return json({ ok: true, devLink: link });
     if (!sent) return json({ error: "mail" }, 502);
@@ -408,25 +442,45 @@ async function authRoute(url, request, env, ctx) {
     if (!row || row.used_at || row.expires_at < now) {
       return Response.redirect(url.origin + "/?expired=1", 302);
     }
-    await db.prepare("UPDATE magic_links SET used_at=?1 WHERE token_hash=?2").bind(now, row.token_hash).run();
-
-    let user = await db.prepare("SELECT id FROM users WHERE email=?1").bind(row.email).first();
-    if (!user) {
-      if (row.email !== normalizeEmail(env.OWNER_EMAIL)) return Response.redirect(url.origin + "/?expired=1", 302);
-      const id = crypto.randomUUID();
-      await db.prepare("INSERT INTO users (id,email,created_at,last_seen) VALUES (?1,?2,?3,?3)")
-        .bind(id, row.email, now).run();
-      user = { id };
-    } else {
-      await db.prepare("UPDATE users SET last_seen=?1 WHERE id=?2").bind(now, user.id).run();
-    }
+    const uid = await finishSignIn(db, env, row, now);
+    if (!uid) return Response.redirect(url.origin + "/?expired=1", 302);
     return new Response(null, {
       status: 302,
       headers: {
         "Location": url.origin + "/?signedin=1",
-        "Set-Cookie": sessionCookie(await makeSession(env, user.id), SESSION_DAYS * 86400)
+        "Set-Cookie": sessionCookie(await makeSession(env, uid), SESSION_DAYS * 86400)
       }
     });
+  }
+
+  /* Same sign-in, by typing the emailed code: the newest live link for that address,
+     5 tries per code and 20 a day per address, then it's burned. */
+  if (path === "/api/auth/code" && request.method === "POST") {
+    if (!db || !env.SESSION_SECRET) return json({ error: "not_configured" }, 503);
+    let body = {};
+    try { body = await request.json(); } catch (e) {}
+    const email = normalizeEmail(body.email), code = String(body.code || "").replace(/\D/g, "");
+    if (!validEmail(email) || code.length !== 6) return json({ error: "code" }, 400);
+    const now = Date.now();
+    const row = await db.prepare(
+      "SELECT token_hash,email,expires_at,used_at FROM magic_links WHERE email=?1 AND used_at IS NULL AND expires_at > ?2 ORDER BY created_at DESC LIMIT 1"
+    ).bind(email, now).first();
+    if (!row) return json({ error: "expired" }, 400);
+    const day = await db.prepare(
+      "SELECT COALESCE(SUM(t.n),0) AS n FROM code_tries t JOIN magic_links m ON m.token_hash=t.token_hash WHERE m.email=?1 AND m.created_at > ?2"
+    ).bind(email, now - 864e5).first();
+    const tries = await db.prepare(
+      "INSERT INTO code_tries (token_hash,n) VALUES (?1,1) ON CONFLICT(token_hash) DO UPDATE SET n=n+1 RETURNING n"
+    ).bind(row.token_hash).first();
+    if (tries.n > CODE_TRIES || (day && day.n >= CODE_TRIES_PER_DAY)) {
+      await db.prepare("UPDATE magic_links SET used_at=?1 WHERE token_hash=?2").bind(now, row.token_hash).run();
+      return json({ error: "locked" }, 429);
+    }
+    if (!timingSafeEqual(code, await signInCode(env, row.token_hash)))
+      return json({ error: "code", left: CODE_TRIES - tries.n }, 400);
+    const uid = await finishSignIn(db, env, row, now);
+    if (!uid) return json({ error: "expired" }, 400);
+    return json({ ok: true }, 200, { "Set-Cookie": sessionCookie(await makeSession(env, uid), SESSION_DAYS * 86400) });
   }
 
   if (path === "/api/admin/review" && request.method === "GET") {
@@ -457,7 +511,8 @@ async function authRoute(url, request, env, ctx) {
     await db.prepare("INSERT INTO magic_links (token_hash,email,created_at,expires_at) VALUES (?1,?2,?3,?4)")
       .bind(await sha256hex(tok), row.email, now, now + LINK_MINUTES * 60000).run();
     const sent = await sendMail(env, row.email, "You're in: Fuel Protocol",
-      "You've been approved for Fuel Protocol. Tap the button to sign in. It works once and expires in " + LINK_MINUTES + " minutes. After that, request a new link from the app any time.",
+      "You've been approved for Fuel Protocol. Tap the button to sign in, or type this code into the app: " + await signInCode(env, await sha256hex(tok)) +
+      ". Both work once and expire in " + LINK_MINUTES + " minutes. After that, ask the app for a new code any time.",
       "Sign in", url.origin + "/api/auth/verify?token=" + encodeURIComponent(tok), "");
     return page("Approved", "<h1>Approved</h1><p><b>" + escHtml(row.email) + "</b> can use Fuel Protocol now." +
       (sent ? " They've been emailed a sign-in link." : " The sign-in email didn't send, so ask them to request a new link from the app.") + "</p>");

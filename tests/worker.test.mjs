@@ -105,7 +105,7 @@ before(async () => {
     "--var", "ANTHROPIC_API_KEY:test-key",
     "--var", "RESEND_KEY:test", "--var", `RESEND_BASE_URL:http://127.0.0.1:${MOCK_PORT}`,
     "--var", `OWNER_EMAIL:${EMAIL}`,
-    "--var", "IMPORTS_PER_DAY:10",
+    "--var", "IMPORTS_PER_DAY:10", "--var", "APPROVALS_PER_DAY:1000",
     "--var", `ANTHROPIC_BASE_URL:http://127.0.0.1:${MOCK_PORT}`], {
     cwd: root, stdio: "pipe", detached: true
   });
@@ -427,6 +427,51 @@ test("invite: deny locks a stranger out without telling them", async () => {
   assert.deepEqual(await (await askAccess(STRANGER)).json(), { ok: true, pending: true });
   assert.ok(!MOCK.mail.some(m => m.to[0] === STRANGER), "the stranger is never emailed");
   assert.equal((await fetch(`${BASE}/api/admin/review?t=forged`)).status, 410);
+});
+
+/* ---------- sign in with the emailed code (Home Screen apps can't use the link) ---------- */
+
+const approve = async who => {
+  const before = MOCK.mail.length;
+  await askAccess(who);
+  const t = linkIn(MOCK.mail.slice(before)[0], /\/api\/admin\/review\?t=\S+/).split("t=")[1];
+  await fetch(`${BASE}/api/admin/decide`, { method: "POST", body: new URLSearchParams({ t, d: "approve" }) });
+  return (mailTo(who).text.match(/code into the app: (\d{6})/) || [])[1];
+};
+const byCode = (email, code) => fetch(`${BASE}/api/auth/code`, {
+  method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, code })
+});
+
+test("code: the sign-in email carries a 6-digit code in its subject and body", () => {
+  const m = MOCK.mail.find(x => x.to[0] === EMAIL && /sign-in code/.test(x.subject));
+  assert.ok(m, "owner sign-in email missing");
+  assert.match(m.subject, /code: \d{6}$/);
+  assert.match(m.text, /code: \d{6}/);
+});
+
+test("code: the code signs you in, once", async () => {
+  const who = `coder-${Date.now()}@example.com`, code = await approve(who);
+  assert.match(code, /^\d{6}$/, "approval email should carry a code");
+  const r = await byCode(who, code);
+  assert.equal(r.status, 200);
+  const ck = r.headers.get("set-cookie");
+  assert.match(ck, /fp_session=[^;]+;.*HttpOnly/);
+  const me = await (await fetch(`${BASE}/api/me`, { headers: { Cookie: ck.split(";")[0] } })).json();
+  assert.equal(me.email, who);
+  assert.deepEqual(await (await byCode(who, code)).json(), { error: "expired" }, "a code works once");
+});
+
+test("code: wrong guesses count down, then even the right code is dead", async () => {
+  const who = `guesser-${Date.now()}@example.com`, code = await approve(who);
+  const wrong = String((+code + 1) % 1e6).padStart(6, "0");
+  for (let left = 4; left >= 0; left--) assert.deepEqual(await (await byCode(who, wrong)).json(), { error: "code", left });
+  assert.equal((await byCode(who, wrong)).status, 429);
+  assert.deepEqual(await (await byCode(who, code)).json(), { error: "expired" });
+});
+
+test("code: malformed codes and addresses with no live code get nowhere", async () => {
+  assert.equal((await byCode(EMAIL, "12ab")).status, 400);
+  assert.deepEqual(await (await byCode("nobody@example.com", "123456")).json(), { error: "expired" });
 });
 
 /* ---------- exercise demo clips ---------- */

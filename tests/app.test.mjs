@@ -122,7 +122,8 @@ test("installable: the worker never caches API calls or writes", () => {
 
 test("invite-only: owner configured, only the owner auto-creates an account", () => {
   assert.match(wranglerCfg, /"OWNER_EMAIL":\s*"[^"@]+@[^"]+"/, "OWNER_EMAIL missing");
-  assert.ok(worker.includes('if (row.email !== normalizeEmail(env.OWNER_EMAIL)) return Response.redirect'), "verify must not create accounts for strangers");
+  assert.ok(worker.includes('if (row.email !== normalizeEmail(env.OWNER_EMAIL)) return null;'), "sign-in must not create accounts for strangers");
+  assert.ok(worker.includes("if (!uid) return Response.redirect") && worker.includes('if (!uid) return json({ error: "expired" }'), "link and code both refuse strangers");
   assert.ok(worker.includes('return json({ ok: true, pending: true });'), "new people must get the pending reply");
   assert.ok(html.includes("res.j.pending"), "sign-in screen must show the request-sent state");
 });
@@ -289,7 +290,7 @@ test("videos: demo clips play from a player outside the render tree, never cache
   assert.ok(html.includes('el.id="vbox"') && html.includes('document.body.appendChild(el)'), "player is created on demand outside #app");
   assert.ok(html.includes('act==="vid"'), "thumbnails must open the player");
   assert.ok(html.includes("playsinline muted loop autoplay"), "clips must play inline on iPhone");
-  assert.match(read("public/sw.js"), /startsWith\("\/media\/"\)\) return/, "service worker must leave clips to the network");
+  assert.match(read("public/sw.js"), /startsWith\("\/media\/"\)\) \{\s*e\.respondWith\(fromMedia/, "service worker must serve saved clips, else the network");
   assert.match(wranglerCfg, /"run_worker_first":\s*\["\/media\/\*"\]/, "clips must go through the worker's sign-in check");
   assert.ok(worker.includes("readSession(env, request)") && worker.includes("MEDIA_RE"), "media route must check the session");
   assert.ok(gitignore.includes("public/media/"), "licensed clips must never be committed");
@@ -323,6 +324,40 @@ test("drop sets: every drop, mini-set, partner, and hold is its own labeled row,
   assert.ok(html.includes('gymRest(/rest.?pause/i.test(gx.target||"")?15:0)'), "no full rest between drops");
 });
 
+test("workout: one Start card, a full-screen player outside the render tree, screen kept awake", () => {
+  assert.ok(html.includes("function sessionHero("), "today's session is one card with one Start button");
+  assert.ok(html.includes('root.id="player"') && html.includes("document.body.appendChild(root)"), "the player lives outside #app");
+  assert.ok(html.includes("if(key!==PL.mkey)"), "the video is only replaced when the exercise changes");
+  assert.ok(html.includes('if(V.sheet&&V.sheet.kind==="gymlog"){paintPlayer();return;}'), "ticking a set repaints the player, not the page");
+  assert.ok(html.includes('navigator.wakeLock.request("screen")'), "the screen stays on mid-workout");
+  for (const a of ["plgo", "pllist", "plclose", "gymrest30", "gymsel", "progopts", "vsave", "install"])
+    assert.ok(html.includes(`act==="${a}"`), `missing action ${a}`);
+});
+
+test("offline: install guide, code sign-in for the Home Screen app, saved clips survive updates", () => {
+  assert.ok(html.includes('autocomplete="one-time-code"'), "the code box should take iOS autofill");
+  assert.ok(html.includes('"/api/auth/code"'), "the app must be able to sign in with a code");
+  assert.ok(html.includes("Add to Home Screen"), "install steps missing");
+  assert.ok(html.includes('MEDIA_CACHE="fuel-media"'), "saved clips cache missing");
+  const sw = read("public/sw.js");
+  assert.match(sw, /const MEDIA = "fuel-media"/);
+  assert.match(sw, /k !== VERSION && k !== MEDIA/, "an app update must not wipe saved clips");
+  assert.ok(worker.includes('path === "/api/auth/code"') && worker.includes("CODE_TRIES"), "code route must cap guesses");
+});
+
+test("offline: the service worker cuts a saved clip to the byte range the player asks for", async () => {
+  const sw = read("public/sw.js");
+  const sliced = new Function(sw.slice(sw.indexOf("async function sliced")) + "; return sliced;")();
+  const clip = () => new Response(new Uint8Array(Array.from({ length: 100 }, (_, i) => i)), { headers: { "Content-Type": "video/mp4" } });
+  const a = await sliced(clip(), "bytes=10-19");
+  assert.equal(a.status, 206);
+  assert.equal(a.headers.get("content-range"), "bytes 10-19/100");
+  assert.deepEqual([...new Uint8Array(await a.arrayBuffer())], Array.from({ length: 10 }, (_, i) => i + 10));
+  assert.equal((await sliced(clip(), "bytes=90-")).headers.get("content-range"), "bytes 90-99/100");
+  assert.equal((await sliced(clip(), "bytes=-5")).headers.get("content-range"), "bytes 95-99/100");
+  assert.equal((await sliced(clip(), "bytes=500-")).status, 416);
+});
+
 test("programs: week controls exist and every move is undoable", () => {
   for (const act of ["prognext", "progskip", "progback", "progredo", "progrestart", "progend", "progstart", "gimstart"]) {
     assert.ok(html.includes(`"${act}"`), `missing program action ${act}`);
@@ -332,8 +367,8 @@ test("programs: week controls exist and every move is undoable", () => {
   assert.ok(html.includes("programs:[],active:null"), "program state missing from freshDB");
 });
 
-test("schema: defines the six tables", () => {
-  for (const t of ["users", "state", "magic_links", "shared_plans", "gym_imports", "approvals"]) {
+test("schema: defines the seven tables", () => {
+  for (const t of ["users", "state", "magic_links", "shared_plans", "gym_imports", "approvals", "code_tries"]) {
     assert.match(schema, new RegExp(`CREATE TABLE IF NOT EXISTS ${t}`), `missing table ${t}`);
   }
 });

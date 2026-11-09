@@ -62,3 +62,9 @@ CREATE TABLE IF NOT EXISTS approvals (
 );
 
 CREATE INDEX IF NOT EXISTS idx_approvals_ip ON approvals(ip_hash);
+
+-- Wrong guesses at the 6-digit sign-in code, per emailed link (rows go when the link does)
+CREATE TABLE IF NOT EXISTS code_tries (
+  token_hash  TEXT PRIMARY KEY,
+  n           INTEGER NOT NULL
+);

@@ -177,3 +177,30 @@ a 15 s breather between mini-sets, drops and clusters none. Add/Remove work by w
   one exercise. The result passes through `cleanProgram()` and is delivered as a program
   code. D1 caps one SQL statement at 100 KB, so long programs are inserted as an INSERT
   plus `json = json || '…'` appends.
+
+## Workout flow
+
+The Workout tab leads with one card: today's session (or the one you tapped in the
+week list) with its exercise thumbnails, an estimated length, and one **Start workout**
+button. In progress it becomes **Continue workout**; finished, a summary. Week controls
+(redo, skip, back, jump, end) and saved videos live in the **Program** sheet.
+
+Starting opens the player (`#player`): full screen, one exercise at a time, the demo
+looping on top, the rows below, rest timer and Next/Finish pinned to the bottom, and a
+list view to jump around. It renders into its own root outside `#app` and repaints only
+the parts that changed (`paintPlayer`), so ticking a set or the rest timer never reloads
+the video. The screen is kept awake (Screen Wake Lock) while it's open.
+
+## Home Screen app and offline videos
+
+On iPhone, a Home Screen web app keeps its own cookies, so a link opened from Mail signs
+in Safari, not the app. Every sign-in email therefore carries a 6-digit code as well
+(`POST /api/auth/code`). The code is an HMAC of the link's stored hash with
+`SESSION_SECRET`, so nothing extra is stored; wrong guesses are counted in `code_tries`:
+5 per code, 20 a day per address, then the code is burned.
+
+"Save videos to this phone" downloads the active program's clips into the
+`fuel-media` cache. The service worker answers `/media/*` from that cache when it can,
+cutting the byte range the video player asks for (206), and otherwise goes to the
+network. Thumbnails are cached as they're seen. App updates clear the shell cache but
+never `fuel-media`.
