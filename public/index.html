@@ -678,21 +678,27 @@ function pullState(){
     else{AUTH.sync="saved";}
   }).catch(function(){AUTH.sync="offline";});
 }
+/* a weak signal hangs instead of failing: after a few seconds, treat it as offline */
+function withTimeout(p,ms){return Promise.race([p,new Promise(function(_,no){setTimeout(function(){no(new Error("timeout"));},ms);})]);}
+/* Offline first: a device that has signed in before opens straight from what's saved on it,
+   then checks with the server in the background, so no connection (or one bar) never holds it up. */
 function boot(){
   if(location.search.indexOf("signedin")>=0)try{history.replaceState({},"",location.pathname);}catch(e){}
-  api("/api/me").then(function(r){return r.ok?r.json():null;}).then(function(d){
+  var lu=lsGet("fuelprotocol:lastuid");
+  if(lu){AUTH.state="in";AUTH.uid=lu;AUTH.email=lsGet("fuelprotocol:lastemail")||"";LS="fuelprotocol:v5:"+lu;loadLocal();render();}
+  withTimeout(api("/api/me"),8000).then(function(r){return r.ok?r.json():null;}).then(function(d){
     if(d&&d.uid){
+      var same=AUTH.state==="in"&&AUTH.uid===d.uid;
       AUTH.state="in";AUTH.uid=d.uid;AUTH.email=d.email||"";
-      try{localStorage.setItem("fuelprotocol:lastuid",d.uid);localStorage.setItem("fuelprotocol:lastemail",AUTH.email);}catch(e){}
-      LS="fuelprotocol:v5:"+d.uid;loadLocal();render();
+      lsSet("fuelprotocol:lastuid",d.uid);lsSet("fuelprotocol:lastemail",AUTH.email);
+      if(!same){LS="fuelprotocol:v5:"+d.uid;loadLocal();}
+      render();
       return pullState().then(render);
     }
     AUTH.state="out";render();
   }).catch(function(){
-    var lu=null,le="";try{lu=localStorage.getItem("fuelprotocol:lastuid");le=localStorage.getItem("fuelprotocol:lastemail")||"";}catch(e){}
-    if(lu){AUTH.state="in";AUTH.uid=lu;AUTH.email=le;AUTH.sync="offline";LS="fuelprotocol:v5:"+lu;loadLocal();}
-    else AUTH.state="out";
-    render();
+    if(AUTH.state==="in"){AUTH.sync="offline";render();}
+    else{AUTH.state="out";render();}
   });
 }
 function sendLink(){
@@ -1621,6 +1627,29 @@ function dropVideos(){
   if(!("caches" in window))return;
   caches.delete(MEDIA_CACHE).then(function(){VDL.saved=null;render();showUndo("Saved videos removed from this phone",null);});
 }
+/* what this device can do offline right now: shown in the install sheet so a screenshot says it all */
+var OFS=null;
+function checkOffline(){
+  var ps=progState(),o={standalone:isStandalone(),sw:"serviceWorker" in navigator,ctl:!!(navigator.serviceWorker&&navigator.serviceWorker.controller),
+    shell:false,vids:0,need:ps?progVideoIds(ps.p).length:0,used:0,quota:0},jobs=[];
+  if("caches" in window){
+    jobs.push(caches.keys().then(function(k){o.shell=k.some(function(n){return /^fuel-v/.test(n);});}));
+    jobs.push(caches.open(MEDIA_CACHE).then(function(c){return c.keys();}).then(function(k){o.vids=k.filter(function(r){return /\.mp4$/.test(r.url);}).length;}));
+  }
+  if(navigator.storage&&navigator.storage.estimate)jobs.push(navigator.storage.estimate().then(function(e){o.used=e.usage||0;o.quota=e.quota||0;}));
+  Promise.all(jobs.map(function(j){return j.catch(function(){});})).then(function(){OFS=o;if(V.sheet&&V.sheet.kind==="install")rerenderSheet();});
+}
+function offlineStatusHtml(){
+  if(!OFS){checkOffline();return '<div class="ls" style="margin-top:6px">Checking this device…</div>';}
+  var o=OFS,mb=function(b){return b>=1073741824?(b/1073741824).toFixed(1)+" GB":Math.round(b/1048576)+" MB";};
+  var row=function(a,b,good){return '<div class="kv"><span>'+a+'</span><b'+(good===false?' style="color:var(--amber)"':'')+'>'+b+'</b></div>';};
+  return '<div class="card" style="margin-top:6px;padding:2px 16px">'+
+    row("Running as",o.standalone?"Home Screen app":"Safari tab")+
+    row("App works offline",o.ctl&&o.shell?"Ready":o.sw?"Not yet":"Not supported",o.ctl&&o.shell)+
+    (o.need?row("Saved videos",o.vids+" of "+o.need,o.vids>=o.need):"")+
+    (o.quota?row("Storage used",mb(o.used)+" of "+mb(o.quota)):"")+'</div>'+
+    (!o.ctl||!o.shell?'<div class="fnote">Open Fuel once with a connection, close it, and open it again. That finishes the offline setup.</div>':'');
+}
 function installBody(){
   var h='';
   if(isStandalone())h+='<div class="okline" style="margin-top:0">Fuel is installed: you’re in the Home Screen app.</div>';
@@ -1633,6 +1662,7 @@ function installBody(){
     '<li><span class="n num">5</span><span>On Wi-Fi, go to the Workout tab and tap <b>Save videos to this phone</b>.</span></li></ol>';
   else h+=INSTALL_PROMPT?'<button class="bigbtn" style="margin-top:0" data-act="instgo">'+IC("download")+'Install Fuel</button>':
     '<div class="sub" style="margin-top:0">On iPhone: open this site in Safari, tap Share, then Add to Home Screen. On Android: open the browser menu and tap Install app.</div>';
+  h+='<div class="flabel">This device</div>'+offlineStatusHtml();
   h+='<div class="flabel">What works offline</div><div class="ls" style="line-height:1.5">Your diary, workouts, the exercise library, and any videos you’ve saved. Food search waits for a connection, and everything you log syncs on its own when you’re back online.</div>';
   if(!isStandalone()&&!lsGet("fuelprotocol:installhide"))h+='<div style="text-align:center;margin-top:12px"><button class="textbtn" data-act="insthide">Hide the reminder on the Workout tab</button></div>';
   return h;
@@ -2724,7 +2754,7 @@ document.addEventListener("click",function(ev){
   else if(act==="progopts"){V.sheet={kind:"progopts"};render();}
   else if(act==="vsave"){if(V.sheet&&V.sheet.kind==="progopts")V.sheet=null;saveVideos();}
   else if(act==="vdrop"){if(confirm("Remove the saved videos from this phone? You can save them again any time."))dropVideos();}
-  else if(act==="install"){V.sheet={kind:"install"};render();}
+  else if(act==="install"){OFS=null;V.sheet={kind:"install"};render();}
   else if(act==="insthide"){lsSet("fuelprotocol:installhide","1");V.sheet=null;render();}
   else if(act==="instgo"){if(INSTALL_PROMPT){INSTALL_PROMPT.prompt();INSTALL_PROMPT=null;}V.sheet=null;render();}
   else if(act==="gymaddex"){V.sheet={kind:"gympick",back:V.sheet,target:"log",q:"",mus:"all",full:true};render();}

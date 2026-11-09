@@ -28,15 +28,16 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // the app page: newest copy when online, the saved copy when not
+  // the app page: the newest copy if the network answers within 3 s, else the saved copy.
+  // A gym with one bar of signal hangs rather than fails, so waiting on it isn't an option.
   if (req.mode === "navigate") {
+    const net = fetch(req).then((res) => {
+      if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put("/", copy)); }
+      return res;
+    });
     e.respondWith(
-      fetch(req)
-        .then((res) => {
-          if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put("/", copy)); }
-          return res;
-        })
-        .catch(() => caches.match("/"))
+      Promise.race([net.catch(() => null), new Promise((r) => setTimeout(r, 3000, null))])
+        .then((res) => res || caches.match("/").then((hit) => hit || net))
     );
     return;
   }

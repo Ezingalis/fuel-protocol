@@ -342,7 +342,11 @@ test("offline: install guide, code sign-in for the Home Screen app, saved clips 
   const sw = read("public/sw.js");
   assert.match(sw, /const MEDIA = "fuel-media"/);
   assert.match(sw, /k !== VERSION && k !== MEDIA/, "an app update must not wipe saved clips");
+  assert.match(sw, /setTimeout\(r, 3000, null\)/, "a hanging network must fall back to the saved app within 3 s");
+  assert.ok(html.includes('withTimeout(api("/api/me"),8000)'), "sign-in check must give up on a hanging network");
+  assert.ok(html.includes('if(lu){AUTH.state="in"'), "a device that signed in before opens from its own data first");
   assert.ok(worker.includes('path === "/api/auth/code"') && worker.includes("CODE_TRIES"), "code route must cap guesses");
+  assert.ok(html.includes("function offlineStatusHtml()") && html.includes('row("App works offline"'), "the install sheet must show this device's offline status");
 });
 
 test("offline: the service worker cuts a saved clip to the byte range the player asks for", async () => {
