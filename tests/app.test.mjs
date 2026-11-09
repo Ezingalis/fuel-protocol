@@ -295,6 +295,34 @@ test("videos: demo clips play from a player outside the render tree, never cache
   assert.ok(gitignore.includes("public/media/"), "licensed clips must never be committed");
 });
 
+test("drop sets: every drop, mini-set, partner, and hold is its own labeled row, grouped by round", () => {
+  const src = html.slice(html.indexOf("function blockRows"), html.indexOf("function planFor"));
+  const { blockRows, repsFor, lastRow, labRange } = new Function(src + "; return { blockRows, repsFor, lastRow, labRange };")();
+  const labels = e => blockRows(e).map(r => r.k);
+  assert.deepEqual(labels({ target: "Drop Set - 2 Drops", st: [{ n: "P", r: "12, 10 reps", x: 1 }, { n: "P", r: "10, 5 reps", x: 2 }] }),
+    ["Top", "Drop 1", "Drop 2"]);
+  assert.deepEqual(labels({ target: "Rest-Pause - 2 Pushes", st: [{ n: "P", r: "15 reps", x: 1 }, { n: "P", r: "to failure", x: 2 }] }),
+    ["Main", "Mini 1", "Mini 2"]);
+  assert.deepEqual(labels({ target: "ClusterFuck", st: [{ n: "P", r: "15 reps", x: 1 }, { n: "P", r: "to failure", x: 4 }] }),
+    ["Main", "Mini 1", "Mini 2", "Mini 3", "Mini 4"]);
+  assert.deepEqual(labels({ target: "Superset", st: [{ n: "Curl", r: "12 reps", x: 1 }, { n: "Dip", r: "12 reps", x: 1 }] }), ["A", "B"]);
+  assert.deepEqual(labels({ target: "Drops + Extreme Stretch Hold", st: [{ n: "Dip W", r: "15 reps" }, { n: "Dip", r: "to failure" }, { n: "Stretch", r: "0:20" }] }),
+    ["Top", "Drop 1", "Hold"]);
+  assert.deepEqual(labels({ target: "", st: [{ n: "Warm Up", r: "1:06", x: 1 }] }), [""], "a lone step needs no label");
+  assert.equal(repsFor({ r: "12, 10 reps" }, 0), 12);
+  assert.equal(repsFor({ r: "12, 10 reps" }, 1), 10);
+  assert.equal(repsFor({ r: "12, 10 reps" }, 5), 10, "later rounds reuse the last number");
+  assert.equal(repsFor({ r: "to failure" }, 0), 0);
+  assert.equal(labRange("Drop 1", "Drop 2"), "Drop 1-2");
+  assert.equal(labRange("Mini 1", "Mini 4"), "Mini 1-4");
+  assert.equal(labRange("Top", "Top"), "Top");
+  const last = [{ g: 1, p: 0, lb: 50 }, { g: 1, p: 1, lb: 40 }, { g: 2, p: 0, lb: 45 }, { g: 2, p: 1, lb: 35 }];
+  assert.equal(lastRow(last, 2, 1, 3).lb, 35, "same round and position first");
+  assert.equal(lastRow(last, 3, 1, 5).lb, 40, "then the same position");
+  assert.ok(html.includes('data-act="gymaddround"') && html.includes('act==="gymdelround"'), "grouped blocks add and remove whole rounds");
+  assert.ok(html.includes('gymRest(/rest.?pause/i.test(gx.target||"")?15:0)'), "no full rest between drops");
+});
+
 test("programs: week controls exist and every move is undoable", () => {
   for (const act of ["prognext", "progskip", "progback", "progredo", "progrestart", "progend", "progstart", "gimstart"]) {
     assert.ok(html.includes(`"${act}"`), `missing program action ${act}`);

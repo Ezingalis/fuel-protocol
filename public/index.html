@@ -329,7 +329,12 @@ textarea{width:100%;min-height:110px;font-family:ui-monospace,Menlo,monospace;fo
 .stn{font-size:14px;font-weight:600;line-height:1.3;margin-bottom:2px}
 .stl{display:flex;gap:8px;font-size:13px;color:var(--sub);line-height:1.4;margin-top:3px}
 .stl .k{flex:0 0 auto;min-width:22px;font-weight:650;color:var(--ink)}
-.rndhd{margin-top:14px;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--faint)}
+.rndhd{margin:14px 0 2px;font-size:12px;font-weight:650;letter-spacing:.02em;color:var(--faint)}
+.rndhd:first-child{margin-top:4px}
+.setrow.lb2{grid-template-columns:34px 1fr 1fr 42px}
+.setrow .sn.lab{font-size:11px;line-height:1.15;font-weight:650;color:var(--sub)}
+.setrow .hold{grid-column:2/4;background:var(--card2);border-radius:var(--r-sm);padding:9px 12px;text-align:center;font-weight:650;font-size:14px}
+.setrow .hold small{font-weight:500;color:var(--sub);font-size:11.5px;margin-left:4px}
 .stalt{display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:13px;font-weight:600;color:var(--green2);text-align:left}
 .stalt svg{width:14px;height:14px}
 #vbox{position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.72)}
@@ -1091,17 +1096,53 @@ function progLog(p,w,si){
   if(!ses)return null;
   var log={rid:null,prog:{pid:p.id,w:w,s:si},name:ses.name+" · Week "+(w+1),ex:[],t0:Date.now(),t1:0};
   ses.ex.forEach(function(e){
-    var last=lastSets(e.n),sets=[],rr=roundReps(e);
-    for(var i=0;i<(e.sets||3);i++){var ls=last&&last[Math.min(i,last.length-1)];
-      sets.push({reps:rr.length?rr[Math.min(i,rr.length-1)]:(e.st&&ls?ls.reps:e.reps)||10,lb:e.lb>0?e.lb:(ls?(ls.lb||0):0),done:false});}
+    var last=lastSets(e.n),sets=[],rows=e.st?blockRows(e):[];
+    for(var g=1;g<=(e.sets||3);g++){
+      if(rows.length>1||(rows.length&&rows[0].timed)){
+        var head=0;
+        rows.forEach(function(r,p){
+          var ls=lastRow(last,g,p,sets.length),want=repsFor(r.s,g-1);if(!head)head=want;
+          var row={g:g,p:p,k:r.k,reps:r.timed?0:want||(ls&&ls.p===p&&ls.reps)||Math.max(1,Math.round((head||10)/2)),lb:r.timed?0:(ls?(ls.lb||0):0),done:false};
+          if(r.timed)row.t=r.s.r;
+          sets.push(row);
+        });
+      }else{var ls=lastRow(last,g,0,g-1);
+        sets.push({reps:repsFor(rows.length?rows[0].s:null,g-1)||(e.st&&ls?ls.reps:e.reps)||10,lb:e.lb>0?e.lb:(ls?(ls.lb||0):0),done:false});}
+    }
     var lx={n:e.n,m:e.m,sets:sets,target:e.target||"",rest:e.rest||0,notes:e.notes||""};
     if(e.st)lx.st=e.st;
     log.ex.push(lx);
   });
   return log;
 }
-function roundReps(e){var m=e.st&&e.st[0]&&/^([\d, ]+) reps$/.exec(e.st[0].r);
-  return m?m[1].split(",").map(function(x){return Math.min(99,Math.max(1,+x||10));}):[];}
+/* one round of a block, steps expanded, each with the label it's logged under:
+   drop sets Top, Drop 1, Drop 2; rest-pause and clusters Main, Mini 1...; supersets A, B; timed steps Hold */
+function blockRows(e){
+  var rows=[];(e.st||[]).forEach(function(s){for(var j=0;j<(s.x||1);j++)rows.push(s);});
+  var tech=String(e.target||"").toLowerCase(),drop=/drop/.test(tech),mini=/rest.?pause|cluster/.test(tech),mv=[],d=0;
+  rows.forEach(function(s){if(mv.indexOf(s.n)<0)mv.push(s.n);});
+  return rows.map(function(s,i){
+    var timed=/^\d+:\d\d$/.test(s.r),k;
+    if(rows.length===1)k="";
+    else if(timed)k="Hold";
+    else if(drop||mini)k=d++===0?(drop?"Top":"Main"):(drop?"Drop ":"Mini ")+(d-1);
+    else if(mv.length>1)k="ABCDEFGH".charAt(mv.indexOf(s.n));
+    else k=String(i+1);
+    return{s:s,k:k,timed:timed};
+  });
+}
+/* "12, 10 reps" -> 12 in round 1, 10 in round 2; "to failure" -> 0 */
+function repsFor(s,gi){var m=s&&/^([\d, ]+) reps$/.exec(s.r||"");if(!m)return 0;
+  var a=m[1].split(",").map(function(x){return Math.min(99,Math.max(0,+x||0));});return a[Math.min(gi,a.length-1)]||0;}
+/* last time's matching row: same round and position, then same position, then by order */
+function lastRow(last,g,p,i){
+  if(!last||!last.length)return null;
+  for(var j=0;j<last.length;j++)if(last[j].g===g&&last[j].p===p)return last[j];
+  for(j=0;j<last.length;j++)if(last[j].g!=null&&last[j].p===p)return last[j];
+  return last[Math.min(i,last.length-1)];
+}
+function labRange(a,b){if(!a||a===b)return a||"";var m=/^(.*?)(\d+)$/.exec(a),n=/^(.*?)(\d+)$/.exec(b||"");
+  return m&&n&&m[1]===n[1]?a+"-"+n[2]:a+"-"+b;}
 function planFor(ds){var pl=DB.gym.plan[ds],p=pl&&progById(pl.pid);
   return p&&p.weeks[pl.w]&&p.weeks[pl.w].sessions[pl.s]?{p:p,w:pl.w,s:pl.s,ses:p.weeks[pl.w].sessions[pl.s]}:null;}
 /* open (or create) the day's workout log. src: "plan" (scheduled for that date), "prog" (session s of
@@ -1234,15 +1275,23 @@ function gymLogBody(){
   if(GT.left>0)h+='<button class="okline" style="width:100%;display:flex;justify-content:center;gap:8px;font-size:15px" data-act="gymrest">'+IC("timer")+'Rest <b class="num" id="gtleft">'+fmtRest(GT.left)+'</b><span style="font-weight:500">· tap to skip</span></button>';
   h+='<div class="kv" style="border:none;padding-top:2px"><span class="ls">'+(log.t1?"Finished":"Tick each set as you finish it")+'</span><b class="num">'+gv.sets+' set'+(gv.sets===1?'':'s')+' · '+fmtVol(gv.vol)+' lb</b></div>';
   (log.ex||[]).forEach(function(ex,ei){
-    var meta=[targetText({target:ex.target,sets:ex.sets.length}),restText(ex)].filter(Boolean).join(" · ");
+    var grouped=ex.sets.some(function(s){return s.g!=null;}),rounds=0,perRound=0;
+    ex.sets.forEach(function(s){if(s.g>rounds)rounds=s.g;if(s.g===1)perRound++;});
+    var meta=[targetText({target:ex.target,sets:grouped?rounds:ex.sets.length}),restText(ex)].filter(Boolean).join(" · ");
     h+='<div class="card" style="padding:16px 14px 12px;margin-top:10px"><div class="exhd"><div class="grow"><div class="mt">'+esc(ex.n)+'</div>'+
        (meta?'<div class="extarget">'+esc(meta)+'</div>':'')+(ex.notes?'<div class="exnote">'+esc(ex.notes)+'</div>':'')+'</div>'+
        '<span class="row" style="gap:6px;flex:0 0 auto"><span class="mtag">'+esc(ex.m)+'</span>'+
        '<button class="sx" data-act="gymdelex" data-ei="'+ei+'" aria-label="Remove exercise">'+IC("x")+'</button></span></div>';
-    if(ex.st)h+=stepsHtml(ex)+'<div class="rndhd">Log each round'+(ex.st.length>1||ex.st[0].x>1?'’s first set':'')+'</div>';
+    if(ex.st)h+=stepsHtml(ex);
     h+='<div style="margin-top:10px">';
+    var many=grouped&&perRound>1;
     ex.sets.forEach(function(s,si){
-      h+='<div class="setrow"><span class="sn num">'+(si+1)+'</span>'+
+      var lab=grouped?(s.k||String(s.g)):String(si+1);
+      if(many&&rounds>1&&s.p===0)h+='<div class="rndhd">Round '+s.g+' of '+rounds+'</div>';
+      var sn='<span class="sn'+(lab.length>2?' lab':' num')+'">'+esc(lab).replace(" ","<br>")+'</span>';
+      if(s.t){h+='<div class="setrow'+(many?' lb2':'')+'">'+sn+'<span class="hold num">'+esc(s.t)+(s.k==="Hold"?'<small>hold</small>':'')+'</span>'+
+         '<button class="setck'+(s.done?" on":"")+'" data-act="gymset" data-ei="'+ei+'" data-si="'+si+'" aria-label="Done">'+IC("check")+'</button></div>';return;}
+      h+='<div class="setrow'+(many?' lb2':'')+'">'+sn+
          '<span class="stp"><button class="msbtn" data-act="gymrepdec" data-ei="'+ei+'" data-si="'+si+'" aria-label="Fewer reps">'+IC("minus")+'</button>'+
          '<span class="setval num">'+s.reps+'<small>reps</small></span>'+
          '<button class="msbtn" data-act="gymrepinc" data-ei="'+ei+'" data-si="'+si+'" aria-label="More reps">'+IC("plus")+'</button></span>'+
@@ -1251,8 +1300,11 @@ function gymLogBody(){
          '<button class="msbtn" data-act="gymlbinc" data-ei="'+ei+'" data-si="'+si+'" aria-label="More weight">'+IC("plus")+'</button></span>'+
          '<button class="setck'+(s.done?" on":"")+'" data-act="gymset" data-ei="'+ei+'" data-si="'+si+'" aria-label="Set done">'+IC("check")+'</button></div>';
     });
-    h+='</div><div class="row" style="gap:8px;margin-top:8px"><button class="textbtn" data-act="gymaddset" data-ei="'+ei+'">'+IC("plus")+'Add set</button>'+
-       (ex.sets.length>1?'<button class="textbtn" data-act="gymdelset" data-ei="'+ei+'">'+IC("minus")+'Remove set</button>':'')+'</div>';
+    h+='</div><div class="row" style="gap:8px;margin-top:8px">'+(many?
+       '<button class="textbtn" data-act="gymaddround" data-ei="'+ei+'">'+IC("plus")+'Add round</button>'+
+       (rounds>1?'<button class="textbtn" data-act="gymdelround" data-ei="'+ei+'">'+IC("minus")+'Remove round</button>':''):
+       '<button class="textbtn" data-act="gymaddset" data-ei="'+ei+'">'+IC("plus")+'Add set</button>'+
+       (ex.sets.length>1?'<button class="textbtn" data-act="gymdelset" data-ei="'+ei+'">'+IC("minus")+'Remove set</button>':''))+'</div>';
     h+='</div>';
   });
   h+='<button class="bigbtn ghost" data-act="gymaddex">'+IC("plus")+'Add exercise</button>';
@@ -1264,16 +1316,15 @@ function gymLogBody(){
 function vidBtn(v,n,cls){return v?'<button class="'+(cls||"vthumb")+'" data-act="vid" data-v="'+v+'" data-n="'+esc(n)+'" aria-label="Play demo: '+esc(n)+'">'+
   '<img src="/media/ex/'+v+'.jpg" alt="" loading="lazy" onerror="this.remove()">'+IC("play")+'</button>':'';}
 function stepsHtml(ex){
-  var groups=[],k=1;
-  ex.st.forEach(function(s){var g=groups[groups.length-1];
+  var groups=[],rows=blockRows(ex),i=0;
+  ex.st.forEach(function(s){var g=groups[groups.length-1],x=s.x||1;
     if(!g||g.n!==s.n||g.v!==s.v){g={n:s.n,v:s.v,lines:[],alt:null};groups.push(g);}
     if(s.alt&&!g.alt)g.alt=s.alt;
-    g.lines.push({k:s.x>1?k+"-"+(k+s.x-1):String(k),t:[s.r,s.c].filter(Boolean).join(" · ")});k+=s.x||1;});
+    g.lines.push({k:labRange(rows[i]&&rows[i].k,rows[i+x-1]&&rows[i+x-1].k),t:[s.r,s.c].filter(Boolean).join(" · ")});i+=x;});
   var one=groups.length===1&&groups[0].n===ex.n,h='<div class="steps">';
   groups.forEach(function(g){
     h+='<div class="stg">'+vidBtn(g.v,g.n)+'<div class="grow">'+(one?'':'<div class="stn">'+esc(g.n)+'</div>');
-    if(k>2)g.lines.forEach(function(l){h+='<div class="stl"><span class="k num">'+l.k+'</span><span>'+esc(l.t)+'</span></div>';});
-    else g.lines.forEach(function(l){if(l.t)h+='<div class="stl"><span>'+esc(l.t)+'</span></div>';});
+    g.lines.forEach(function(l){if(l.k||l.t)h+='<div class="stl">'+(l.k?'<span class="k">'+esc(l.k)+'</span>':'')+'<span>'+esc(l.t)+'</span></div>';});
     if(g.alt)h+='<button class="stalt" data-act="vid" data-v="'+g.alt.v+'" data-n="'+esc(g.alt.n)+'"'+(g.alt.v?'':' disabled')+'>Or swap in: '+esc(g.alt.n)+(g.alt.v?IC("play"):'')+'</button>';
     h+='</div></div>';});
   return h+'</div>';
@@ -2359,8 +2410,9 @@ document.addEventListener("click",function(ev){
     var gsi=el.getAttribute("data-s");
     gymOpenLog(el.getAttribute("data-d")||todayStr(),el.getAttribute("data-src")||"",gsi==null?-1:+gsi);}
   else if(act==="gymset"){
-    var gl=DB.gym.logs[V.sheet.ds],gs=gl.ex[+el.getAttribute("data-ei")].sets[+el.getAttribute("data-si")];
-    gs.done=!gs.done;if(gs.done&&!gl.t1)gymRest(gl.ex[+el.getAttribute("data-ei")].rest||90);
+    var gl=DB.gym.logs[V.sheet.ds],gx=gl.ex[+el.getAttribute("data-ei")],gsi=+el.getAttribute("data-si"),gs=gx.sets[gsi],gn=gx.sets[gsi+1];
+    gs.done=!gs.done;
+    if(gs.done&&!gl.t1){if(gs.g!=null&&gn&&gn.g===gs.g)gymRest(/rest.?pause/i.test(gx.target||"")?15:0);else gymRest(gx.rest||90);}
     save();rerenderSheet();}
   else if(act==="gymrepinc"||act==="gymrepdec"||act==="gymlbinc"||act==="gymlbdec"){
     var gl2=DB.gym.logs[V.sheet.ds],gs2=gl2.ex[+el.getAttribute("data-ei")].sets[+el.getAttribute("data-si")];
@@ -2376,6 +2428,13 @@ document.addEventListener("click",function(ev){
   else if(act==="gymdelset"){
     var gl4=DB.gym.logs[V.sheet.ds],gx4=gl4.ex[+el.getAttribute("data-ei")];
     if(gx4.sets.length>1)gx4.sets.pop();save();rerenderSheet();}
+  else if(act==="gymaddround"){
+    var gl7=DB.gym.logs[V.sheet.ds],gx7=gl7.ex[+el.getAttribute("data-ei")],lg7=gx7.sets[gx7.sets.length-1].g;
+    gx7.sets.filter(function(x){return x.g===lg7;}).forEach(function(x){var c={g:lg7+1,p:x.p,k:x.k,reps:x.reps,lb:x.lb,done:false};if(x.t)c.t=x.t;gx7.sets.push(c);});
+    save();rerenderSheet();}
+  else if(act==="gymdelround"){
+    var gl8=DB.gym.logs[V.sheet.ds],gx8=gl8.ex[+el.getAttribute("data-ei")],lg8=gx8.sets[gx8.sets.length-1].g;
+    if(lg8>1)gx8.sets=gx8.sets.filter(function(x){return x.g!==lg8;});save();rerenderSheet();}
   else if(act==="gymdelex"){
     var gl5=DB.gym.logs[V.sheet.ds];gl5.ex.splice(+el.getAttribute("data-ei"),1);save();rerenderSheet();}
   else if(act==="gymaddex"){V.sheet={kind:"gympick",back:V.sheet,target:"log",q:"",mus:"all",full:true};render();}

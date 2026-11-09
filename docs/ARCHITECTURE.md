@@ -153,8 +153,15 @@ the app coming back to the foreground after a failed sync) the page calls
 A program exercise can carry `steps`: a drop set's drops, a cluster's mini-sets, a
 superset's partner. Each step names its movement, the reps per round ("12, 10 reps",
 "to failure", "1:06"), a cue, and a demo clip id. The workout card shows the steps with
-tap-to-play thumbnails above the rows you log (one row per round). The player is a
-fixed overlay outside the render tree, so ticking sets never restarts a clip.
+tap-to-play thumbnails above the rows you log. The player is a fixed overlay outside
+the render tree, so ticking sets never restarts a clip.
+
+Every step is its own logged row, grouped by round (`set.g` round, `set.p` position,
+`set.k` label): drop sets read Top, Drop 1, Drop 2; rest-pause and clusters Main,
+Mini 1...; supersets A, B; timed steps are Hold rows with a check only. Reps prefill
+per round from the step ("12, 10 reps"), weights from last time's row in the same round
+and position. The full rest timer starts only after a round's last row; rest-pause gets
+a 15 s breather between mini-sets, drops and clusters none. Add/Remove work by whole round.
 
 - Clips are 480×480 H.264 MP4s plus JPG thumbnails at `public/media/ex/<id>.mp4|.jpg`.
   They're licensed for personal use: `public/media/` is gitignored and ships only from
