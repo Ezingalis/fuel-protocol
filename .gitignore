@@ -15,3 +15,7 @@ node_modules/
 
 # OS
 .DS_Store
+
+# Exercise demo clips: licensed for personal use, never committed. They live only on the
+# machine that deploys (see docs/ARCHITECTURE.md, "Exercise videos").
+public/media/

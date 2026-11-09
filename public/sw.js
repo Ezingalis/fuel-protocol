@@ -17,8 +17,10 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
   const req = e.request, url = new URL(req.url);
-  // writes, other sites, and every API call go straight to the network: live data is never cached
-  if (req.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
+  // writes, other sites, and every API call go straight to the network: live data is never cached.
+  // Demo clips too: video is fetched in byte ranges, which a cache can't answer.
+  if (req.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/") ||
+      url.pathname.startsWith("/media/")) return;
 
   // the app page: newest copy when online, the saved copy when not
   if (req.mode === "navigate") {

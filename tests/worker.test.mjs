@@ -7,6 +7,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawn, execSync } from "node:child_process";
+import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -89,7 +90,13 @@ function startMock() {
   return new Promise(res => mock.listen(MOCK_PORT, "127.0.0.1", res));
 }
 
+/* a stand-in demo clip, written into the (gitignored) media folder before wrangler dev starts */
+const CLIP = "TestClipZz0001", CLIP_BYTES = Buffer.from(Array.from({ length: 1000 }, (_, i) => i % 256));
+const clipPath = () => join(root, "public", "media", "ex", CLIP + ".mp4");
+
 before(async () => {
+  mkdirSync(dirname(clipPath()), { recursive: true });
+  writeFileSync(clipPath(), CLIP_BYTES);
   execSync("npx wrangler d1 execute fuel-protocol-db --local --file=./schema.sql", {
     cwd: root, stdio: "pipe"
   });
@@ -102,18 +109,20 @@ before(async () => {
     "--var", `ANTHROPIC_BASE_URL:http://127.0.0.1:${MOCK_PORT}`], {
     cwd: root, stdio: "pipe", detached: true
   });
-  const deadline = Date.now() + 90_000;
+  /* first start indexes every static file, demo clips included, so allow a slow boot */
+  const deadline = Date.now() + 180_000;
   while (Date.now() < deadline) {
     try {
-      const r = await fetch(`${BASE}/api/health`);
+      const r = await fetch(`${BASE}/api/health`, { signal: AbortSignal.timeout(5000) });
       if (r.ok) return;
     } catch { /* not up yet */ }
     await new Promise(res => setTimeout(res, 500));
   }
-  throw new Error("wrangler dev did not become ready within 90s");
+  throw new Error("wrangler dev did not become ready within 180s");
 });
 
 after(() => {
+  rmSync(clipPath(), { force: true });
   if (dev?.pid) {
     try { process.kill(-dev.pid, "SIGTERM"); } catch { try { dev.kill("SIGTERM"); } catch {} }
   }
@@ -418,6 +427,45 @@ test("invite: deny locks a stranger out without telling them", async () => {
   assert.deepEqual(await (await askAccess(STRANGER)).json(), { ok: true, pending: true });
   assert.ok(!MOCK.mail.some(m => m.to[0] === STRANGER), "the stranger is never emailed");
   assert.equal((await fetch(`${BASE}/api/admin/review?t=forged`)).status, 410);
+});
+
+/* ---------- exercise demo clips ---------- */
+
+const clip = (path, headers = {}) => fetch(BASE + path, { headers });
+
+test("media: signed out gets nothing", async () => {
+  const r = await clip(`/media/ex/${CLIP}.mp4`);
+  assert.equal(r.status, 401);
+  assert.equal(r.headers.get("cache-control"), "no-store");
+});
+
+test("media: signed in gets the whole clip as video, privately cached", async () => {
+  const r = await clip(`/media/ex/${CLIP}.mp4`, { Cookie: cookie });
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get("content-type"), "video/mp4");
+  assert.match(r.headers.get("cache-control"), /^private/);
+  assert.equal(r.headers.get("accept-ranges"), "bytes");
+  assert.deepEqual(Buffer.from(await r.arrayBuffer()), CLIP_BYTES);
+});
+
+test("media: byte ranges come back as 206 slices (iPhone video needs them)", async () => {
+  const r = await clip(`/media/ex/${CLIP}.mp4`, { Cookie: cookie, Range: "bytes=10-19" });
+  assert.equal(r.status, 206);
+  assert.equal(r.headers.get("content-range"), "bytes 10-19/1000");
+  assert.deepEqual(Buffer.from(await r.arrayBuffer()), CLIP_BYTES.subarray(10, 20));
+  const tail = await clip(`/media/ex/${CLIP}.mp4`, { Cookie: cookie, Range: "bytes=-5" });
+  assert.equal(tail.status, 206);
+  assert.deepEqual(Buffer.from(await tail.arrayBuffer()), CLIP_BYTES.subarray(995));
+  const open = await clip(`/media/ex/${CLIP}.mp4`, { Cookie: cookie, Range: "bytes=990-" });
+  assert.equal(open.headers.get("content-range"), "bytes 990-999/1000");
+  const past = await clip(`/media/ex/${CLIP}.mp4`, { Cookie: cookie, Range: "bytes=5000-" });
+  assert.equal(past.status, 416);
+});
+
+test("media: unknown clips and odd paths are 404", async () => {
+  for (const p of ["/media/ex/NoSuchClip0001.mp4", "/media/ex/short.mp4", "/media/ex/" + CLIP + ".mov", "/media/" + CLIP + ".mp4"]) {
+    assert.equal((await clip(p, { Cookie: cookie })).status, 404, p);
+  }
 });
 
 test("logout: clears the cookie", async () => {

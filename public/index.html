@@ -315,6 +315,30 @@ textarea{width:100%;min-height:110px;font-family:ui-monospace,Menlo,monospace;fo
 .blk .exr .en{font-size:14px;font-weight:550}
 .blk .exr .sr{font-size:14px;font-weight:650;text-align:right;font-variant-numeric:tabular-nums}
 .blk .exr .et{grid-column:1/-1;font-size:12.5px;color:var(--sub)}
+/* exercise demo clips */
+.vthumb,.vmini{position:relative;flex:0 0 auto;display:grid;place-items:center;overflow:hidden;background:var(--card2);color:#fff;
+  box-shadow:inset 0 0 0 1px var(--line2)}
+.vthumb{width:60px;height:60px;border-radius:12px}
+.vmini{width:40px;height:40px;border-radius:9px}
+.vthumb img,.vmini img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.vthumb svg,.vmini svg{position:relative;width:20px;height:20px;padding:5px;box-sizing:content-box;border-radius:999px;background:rgba(0,0,0,.45)}
+.vmini svg{width:14px;height:14px;padding:4px}
+.blk .exr .vrow{grid-column:1/-1;display:flex;gap:6px;margin-top:4px}
+.steps{display:grid;gap:12px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line2)}
+.stg{display:flex;gap:12px;align-items:flex-start}
+.stn{font-size:14px;font-weight:600;line-height:1.3;margin-bottom:2px}
+.stl{display:flex;gap:8px;font-size:13px;color:var(--sub);line-height:1.4;margin-top:3px}
+.stl .k{flex:0 0 auto;min-width:22px;font-weight:650;color:var(--ink)}
+.rndhd{margin-top:14px;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--faint)}
+.stalt{display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:13px;font-weight:600;color:var(--green2);text-align:left}
+.stalt svg{width:14px;height:14px}
+#vbox{position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.72)}
+#vbox.on{display:flex}
+#vbox .vcard{width:100%;max-width:460px;border-radius:20px;overflow:hidden;background:var(--card);box-shadow:0 24px 60px -20px rgba(0,0,0,.6)}
+#vbox .vhd{display:flex;align-items:center;gap:10px;padding:10px 10px 10px 16px}
+#vbox .vhd b{flex:1;font-size:15px;font-weight:650;line-height:1.3}
+#vbox video{display:block;width:100%;aspect-ratio:1/1;background:#000}
+#vbox .vmsg{padding:28px 18px;text-align:center;color:var(--sub);font-size:14px}
 .tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:600;background:var(--card2);color:var(--sub);margin-left:6px;vertical-align:1px}
 .tag.now{background:var(--greenSoft);color:var(--green2)}
 .tag.deload{background:var(--amberSoft);color:var(--amber)}
@@ -1067,13 +1091,17 @@ function progLog(p,w,si){
   if(!ses)return null;
   var log={rid:null,prog:{pid:p.id,w:w,s:si},name:ses.name+" · Week "+(w+1),ex:[],t0:Date.now(),t1:0};
   ses.ex.forEach(function(e){
-    var last=lastSets(e.n),sets=[];
+    var last=lastSets(e.n),sets=[],rr=roundReps(e);
     for(var i=0;i<(e.sets||3);i++){var ls=last&&last[Math.min(i,last.length-1)];
-      sets.push({reps:e.reps||10,lb:e.lb>0?e.lb:(ls?(ls.lb||0):0),done:false});}
-    log.ex.push({n:e.n,m:e.m,sets:sets,target:e.target||"",rest:e.rest||0,notes:e.notes||""});
+      sets.push({reps:rr.length?rr[Math.min(i,rr.length-1)]:(e.st&&ls?ls.reps:e.reps)||10,lb:e.lb>0?e.lb:(ls?(ls.lb||0):0),done:false});}
+    var lx={n:e.n,m:e.m,sets:sets,target:e.target||"",rest:e.rest||0,notes:e.notes||""};
+    if(e.st)lx.st=e.st;
+    log.ex.push(lx);
   });
   return log;
 }
+function roundReps(e){var m=e.st&&e.st[0]&&/^([\d, ]+) reps$/.exec(e.st[0].r);
+  return m?m[1].split(",").map(function(x){return Math.min(99,Math.max(1,+x||10));}):[];}
 function planFor(ds){var pl=DB.gym.plan[ds],p=pl&&progById(pl.pid);
   return p&&p.weeks[pl.w]&&p.weeks[pl.w].sessions[pl.s]?{p:p,w:pl.w,s:pl.s,ses:p.weeks[pl.w].sessions[pl.s]}:null;}
 /* open (or create) the day's workout log. src: "plan" (scheduled for that date), "prog" (session s of
@@ -1182,9 +1210,10 @@ function weeksTL(weeks,open,curW,pid){
         h+='<div class="sh"><span>'+esc(s.name)+'</span>'+(pid?'<button class="textbtn" style="padding:0;font-size:13px;color:var(--green2)" data-act="wksched" data-pid="'+pid+'" data-a="'+bk.a+'" data-b="'+bk.b+'" data-s="'+si+'">'+IC("plans")+'Schedule</button>':
            '<span class="ls">'+s.ex.length+' exercises</span>')+'</div>';
         s.ex.forEach(function(e){
-          var meta=[targetText(e),restText(e)].filter(Boolean).join(" · ");
-          h+='<div class="exr"><span class="en">'+esc(e.n)+'</span><span class="sr">'+e.sets+' × '+e.reps+(e.lb>0?' · '+e.lb+' lb':'')+'</span>'+
-             (meta?'<span class="et">'+esc(meta)+'</span>':'')+'</div>';});
+          var meta=[targetText(e),restText(e)].filter(Boolean).join(" · "),seen={},th='';
+          (e.st||[]).forEach(function(x){if(x.v&&!seen[x.v]){seen[x.v]=1;th+=vidBtn(x.v,x.n,"vmini");}});
+          h+='<div class="exr"><span class="en">'+esc(e.n)+'</span><span class="sr">'+(e.st?e.sets+' round'+(e.sets===1?'':'s'):e.sets+' × '+e.reps)+(e.lb>0?' · '+e.lb+' lb':'')+'</span>'+
+             (meta?'<span class="et">'+esc(meta)+'</span>':'')+(th?'<span class="vrow">'+th+'</span>':'')+'</div>';});
       });
       h+='</div>';
     }
@@ -1210,6 +1239,7 @@ function gymLogBody(){
        (meta?'<div class="extarget">'+esc(meta)+'</div>':'')+(ex.notes?'<div class="exnote">'+esc(ex.notes)+'</div>':'')+'</div>'+
        '<span class="row" style="gap:6px;flex:0 0 auto"><span class="mtag">'+esc(ex.m)+'</span>'+
        '<button class="sx" data-act="gymdelex" data-ei="'+ei+'" aria-label="Remove exercise">'+IC("x")+'</button></span></div>';
+    if(ex.st)h+=stepsHtml(ex)+'<div class="rndhd">Log each round'+(ex.st.length>1||ex.st[0].x>1?'’s first set':'')+'</div>';
     h+='<div style="margin-top:10px">';
     ex.sets.forEach(function(s,si){
       h+='<div class="setrow"><span class="sn num">'+(si+1)+'</span>'+
@@ -1230,6 +1260,41 @@ function gymLogBody(){
      '<button class="bigbtn ghost" data-act="gymreopen">Reopen to edit sets</button>')+'</div>';
   return h;
 }
+/* a block's steps, grouped by movement: thumbnail (tap to play) + "1 · 12, 10 reps · cue" lines */
+function vidBtn(v,n,cls){return v?'<button class="'+(cls||"vthumb")+'" data-act="vid" data-v="'+v+'" data-n="'+esc(n)+'" aria-label="Play demo: '+esc(n)+'">'+
+  '<img src="/media/ex/'+v+'.jpg" alt="" loading="lazy" onerror="this.remove()">'+IC("play")+'</button>':'';}
+function stepsHtml(ex){
+  var groups=[],k=1;
+  ex.st.forEach(function(s){var g=groups[groups.length-1];
+    if(!g||g.n!==s.n||g.v!==s.v){g={n:s.n,v:s.v,lines:[],alt:null};groups.push(g);}
+    if(s.alt&&!g.alt)g.alt=s.alt;
+    g.lines.push({k:s.x>1?k+"-"+(k+s.x-1):String(k),t:[s.r,s.c].filter(Boolean).join(" · ")});k+=s.x||1;});
+  var one=groups.length===1&&groups[0].n===ex.n,h='<div class="steps">';
+  groups.forEach(function(g){
+    h+='<div class="stg">'+vidBtn(g.v,g.n)+'<div class="grow">'+(one?'':'<div class="stn">'+esc(g.n)+'</div>');
+    if(k>2)g.lines.forEach(function(l){h+='<div class="stl"><span class="k num">'+l.k+'</span><span>'+esc(l.t)+'</span></div>';});
+    else g.lines.forEach(function(l){if(l.t)h+='<div class="stl"><span>'+esc(l.t)+'</span></div>';});
+    if(g.alt)h+='<button class="stalt" data-act="vid" data-v="'+g.alt.v+'" data-n="'+esc(g.alt.n)+'"'+(g.alt.v?'':' disabled')+'>Or swap in: '+esc(g.alt.n)+(g.alt.v?IC("play"):'')+'</button>';
+    h+='</div></div>';});
+  return h+'</div>';
+}
+/* demo player: lives outside the app's render tree so ticking sets never restarts the clip */
+function openVid(v,n){
+  if(!v)return;
+  var el=document.getElementById("vbox");
+  if(!el){el=document.createElement("div");el.id="vbox";el.setAttribute("role","dialog");el.setAttribute("aria-modal","true");document.body.appendChild(el);
+    el.addEventListener("click",function(ev){if(ev.target===el||ev.target.closest("[data-vclose]"))closeVid();});}
+  el.innerHTML='<div class="vcard"><div class="vhd"><b>'+esc(n||"Demo")+'</b><button class="sx" data-vclose aria-label="Close video">'+IC("x")+'</button></div>'+
+    '<video src="/media/ex/'+v+'.mp4" poster="/media/ex/'+v+'.jpg" playsinline muted loop autoplay controls preload="auto"></video>'+
+    '<div class="vmsg" hidden>This video needs a connection and a signed-in account.</div></div>';
+  var vd=el.querySelector("video");
+  vd.addEventListener("error",function(){vd.hidden=true;el.querySelector(".vmsg").hidden=false;});
+  el.classList.add("on");
+}
+function closeVid(){var el=document.getElementById("vbox");if(!el||!el.classList.contains("on"))return;
+  var vd=el.querySelector("video");if(vd){vd.pause();vd.removeAttribute("src");vd.load();}
+  el.classList.remove("on");el.innerHTML="";}
+document.addEventListener("keydown",function(ev){if(ev.key==="Escape")closeVid();});
 function gymImportBody(){
   var sh=V.sheet;
   if(sh.stage==="reading")
@@ -1406,6 +1471,7 @@ function renderGym(){
 }
 /* program JSON from the server (PDF import or a code) is coerced field by field
    before it becomes part of the diary */
+function vidId(v){v=String(v==null?"":v);return /^[A-Za-z0-9]{8,80}$/.test(v)?v:"";}
 function programDraftFrom(p){
   p=p||{};
   var S=function(v,n){return String(v==null?"":v).trim().slice(0,n);};
@@ -1413,8 +1479,11 @@ function programDraftFrom(p){
   var A=function(v){return Array.isArray(v)?v:[];};
   var weeks=A(p.weeks).slice(0,26).map(function(w){w=w||{};return{label:S(w.label,40),deload:w.deload===true,repeated:w.repeated===true,
     sessions:A(w.sessions).slice(0,7).map(function(s,si){s=s||{};return{name:S(s.name,40)||"Day "+(si+1),days:[],
-      ex:A(s.exercises).slice(0,15).map(function(e){e=e||{};return{n:S(e.name,80),m:S(e.muscle,20)||"other",
-        sets:N(e.sets,1,10,3),reps:N(e.reps,1,100,10),lb:N(e.lb,0,1500,0),target:S(e.target,80),rest:N(e.rest,0,900,0),notes:S(e.notes,140)};})
+      ex:A(s.exercises).slice(0,20).map(function(e){e=e||{};var o={n:S(e.name,80),m:S(e.muscle,20)||"other",
+        sets:N(e.sets,1,10,3),reps:N(e.reps,1,100,10),lb:N(e.lb,0,1500,0),target:S(e.target,80),rest:N(e.rest,0,900,0),notes:S(e.notes,140)};
+        var st=A(e.steps).slice(0,12).map(function(x){x=x||{};var a=x.alt||{},o2={n:S(x.name,80),v:vidId(x.video),r:S(x.reps,24),c:S(x.note,160),x:N(x.times,1,10,1)};
+          if(S(a.name,80))o2.alt={n:S(a.name,80),v:vidId(a.video)};return o2;}).filter(function(x){return x.n;});
+        if(st.length)o.st=st;return o;})
         .filter(function(e){return e.n;})};}).filter(function(s){return s.ex.length;})};}).filter(function(w){return w.sessions.length;});
   if(!weeks.length)return null;
   return{id:uid(),name:S(p.program,80)||"Imported program",notes:S(p.notes,500),padded:p.padded===true,src:"pdf",at:Date.now(),weeks:weeks};
@@ -2284,6 +2353,7 @@ document.addEventListener("click",function(ev){
     save();V.sheet=null;render();}
   else if(act==="planimport"){planImport();}
   else if(act==="progcodeimp"){progCodeImport();}
+  else if(act==="vid"){openVid(el.getAttribute("data-v"),el.getAttribute("data-n"));}
   /* workouts */
   else if(act==="gymstart"){
     var gsi=el.getAttribute("data-s");

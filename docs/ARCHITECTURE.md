@@ -147,3 +147,26 @@ It never caches `/api/*` or any non-GET request: diary data stays in
 localStorage + `/api/state`. When the connection returns (`online` event, or
 the app coming back to the foreground after a failed sync) the page calls
 `pullState()`, which pushes local changes if they're newer.
+
+## Exercise videos
+
+A program exercise can carry `steps`: a drop set's drops, a cluster's mini-sets, a
+superset's partner. Each step names its movement, the reps per round ("12, 10 reps",
+"to failure", "1:06"), a cue, and a demo clip id. The workout card shows the steps with
+tap-to-play thumbnails above the rows you log (one row per round). The player is a
+fixed overlay outside the render tree, so ticking sets never restarts a clip.
+
+- Clips are 480×480 H.264 MP4s plus JPG thumbnails at `public/media/ex/<id>.mp4|.jpg`.
+  They're licensed for personal use: `public/media/` is gitignored and ships only from
+  the machine that holds the files. A deploy from a fresh clone has no clips (thumbnails
+  hide themselves; the player says the video is unavailable).
+- `run_worker_first: ["/media/*"]` sends clip requests through the worker, which
+  requires a valid session and answers byte ranges with 206 (iPhone video needs them).
+  The service worker never caches `/media/`.
+- Remux clips with `ffmpeg -i in.mp4 -map 0 -c copy -movflags +faststart out.mp4`:
+  exports from streaming services can carry a bogus duration that breaks looping on iOS.
+- `routineToProgram()` in `program.js` turns a `fuel.routine/v1` export (weeks > days >
+  blocks > steps, plus an exercise library) into the program format; each block becomes
+  one exercise. The result passes through `cleanProgram()` and is delivered as a program
+  code. D1 caps one SQL statement at 100 KB, so long programs are inserted as an INSERT
+  plus `json = json || '…'` appends.

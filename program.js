@@ -59,6 +59,9 @@ export function importError(code) { const e = new Error(code); e.code = code; re
 export const clampInt = (v, lo, hi, dflt) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt; };
 export const clip = (s, n) => String(s == null ? "" : s).trim().slice(0, n);
 export const MAX_WEEKS = 26;
+export const MAX_EXERCISES = 20;
+/* demo clips are named by an opaque id; anything else is dropped rather than turned into a path */
+export const videoId = v => (/^[A-Za-z0-9]{8,80}$/.test(String(v || "")) ? String(v) : "");
 export const obj = v => (v && typeof v === "object" ? v : {});
 export const arr = v => (Array.isArray(v) ? v : []);
 /* model output is untrusted: rebuild it field by field with hard bounds,
@@ -70,10 +73,10 @@ export function cleanProgram(raw) {
     const sessions = arr(b.sessions).slice(0, 7).map((s, si) => {
       s = obj(s);
       const days = [...new Set(arr(s.days).map(d => Math.round(Number(d))).filter(d => d >= 0 && d <= 6))];
-      const exercises = arr(s.exercises).slice(0, 15).map(e => {
+      const exercises = arr(s.exercises).slice(0, MAX_EXERCISES).map(e => {
         e = obj(e);
-        const lb = Number(e.lb);
-        return {
+        const lb = Number(e.lb), steps = cleanSteps(e.steps);
+        return Object.assign({
           name: clip(e.name, 80),
           muscle: MUSCLES.includes(e.muscle) ? e.muscle : "other",
           sets: clampInt(e.sets, 1, 10, 3),
@@ -82,7 +85,7 @@ export function cleanProgram(raw) {
           lb: Number.isFinite(lb) ? Math.min(1500, Math.max(0, Math.round(lb / 5) * 5)) : 0,
           rest: clampInt(e.rest_sec, 0, 900, 0),
           notes: clip(e.notes, 140)
-        };
+        }, steps.length ? { steps } : {});
       }).filter(e => e.name);
       return { name: clip(s.name, 40) || "Day " + (si + 1), days, exercises };
     }).filter(s => s.exercises.length);
@@ -97,4 +100,96 @@ export function cleanProgram(raw) {
   const padded = weeks.length < total;
   while (weeks.length < total) weeks.push(Object.assign({}, weeks[weeks.length - 1], { repeated: true }));
   return { program: clip(p.program, 80) || "Imported program", notes: clip(p.notes, 500), weeks, padded };
+}
+
+/* An exercise can carry the steps it is made of: a drop set's drops, a cluster's mini-sets,
+   a superset's partner. Each step names its movement, its demo clip, and the reps per round.
+   times = how many identical steps in a row it stands for. */
+function cleanSteps(v) {
+  return arr(v).slice(0, 12).map(s => {
+    s = obj(s);
+    const a = obj(s.alt), out = { name: clip(s.name, 80), video: videoId(s.video), reps: clip(s.reps, 24),
+      note: clip(s.note, 160), times: clampInt(s.times, 1, 10, 1) };
+    if (clip(a.name, 80)) out.alt = { name: clip(a.name, 80), video: videoId(a.video) };
+    return out;
+  }).filter(s => s.name);
+}
+
+/* ---- fuel.routine/v1 → program ----
+   Routines exported from coaching apps arrive as weeks > days > blocks > steps, plus an
+   exercise library with demo clips. Each block becomes one exercise: its rounds are the
+   sets you log, its steps are the recipe (with videos) shown above them. */
+const tidy = s => String(s == null ? "" : s).replace(/[\u2013\u2014]/g, "-").replace(/[\u201c\u201d]/g, '"').replace(/\s+/g, " ").trim();
+const titleCase = s => tidy(s).toLowerCase().replace(/(^|[\s\-/("])([a-z])/g, (m, a, b) => a + b.toUpperCase());
+const CATEGORY_MUSCLE = [[/quad/i, "quadriceps"], [/hamstring/i, "hamstrings"], [/glute/i, "glutes"], [/adductor/i, "adductors"],
+  [/abductor/i, "abductors"], [/calf|calves/i, "calves"], [/chest|pec/i, "chest"], [/tricep/i, "triceps"], [/bicep/i, "biceps"],
+  [/forearm/i, "forearms"], [/mid trap|rhomboid|upper back/i, "middle back"], [/trap/i, "traps"], [/lat/i, "lats"],
+  [/delt|shoulder/i, "shoulders"], [/\babs?\b|core|oblique/i, "abdominals"], [/lower back|erector/i, "lower back"], [/neck/i, "neck"]];
+const NAME_MUSCLE = [[/warm.?up|explanation|\btip\b/i, "other"], [/calf/i, "calves"], [/wrist|forearm/i, "forearms"],
+  [/thoracic/i, "middle back"], [/jefferson|back extension/i, "lower back"], [/shrug|kelso/i, "traps"],
+  [/delt|lateral|front raise|shoulder press|raise to press/i, "shoulders"], [/skull|tricep|pushdown|kickback/i, "triceps"],
+  [/\bdips?\b/i, "chest"], [/leg curl|stiffs?\b|rdl|romanian|nordic|hamstring/i, "hamstrings"], [/curl/i, "biceps"],
+  [/\brows?\b|pull-?ups?|pulldown|pullover/i, "lats"], [/knee raise|\babs?\b|crunch|pelvic tilt|sit-?up|plank/i, "abdominals"],
+  [/glute|hip thrust|bridge/i, "glutes"], [/sissy|squat|lunge|quad|leg extension|leg press/i, "quadriceps"],
+  [/press|fly|push-?ups?|chest/i, "chest"]];
+function muscleOf(category, name, session) {
+  const hit = (rules, s) => { for (const [re, m] of rules) if (s && re.test(s)) return m; return ""; };
+  return hit(CATEGORY_MUSCLE, String(category || "").split("/")[0]) || hit(NAME_MUSCLE, name) ||
+    (/push/i.test(session) ? "chest" : /pull/i.test(session) ? "lats" : /leg/i.test(session) ? "quadriceps" : "other");
+}
+const clock = sec => Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0");
+function stepReps(s) {
+  const r = tidy(s.reps).replace(/\s*,\s*/g, ", ");
+  if (r) return /^[\d, ]+$/.test(r) ? r + " reps" : r;
+  if (Number(s.timeSeconds) > 0) return clock(Math.round(Number(s.timeSeconds)));
+  return "to failure";
+}
+export function routineToProgram(raw) {
+  const r = obj(raw), lib = obj(r.exercises);
+  if (r.schema !== "fuel.routine/v1") throw importError("not_routine");
+  const ex = id => obj(lib[id]);
+  const clipId = id => videoId((/([A-Za-z0-9]+)\.mp4$/.exec(String(ex(id).video || "")) || [])[1]);
+  const weeks = arr(r.weeks), themes = weeks.map(w => titleCase(obj(w).theme)).filter(Boolean);
+  return {
+    program: tidy(r.name),
+    notes: [tidy(r.schedule).replace(/^(\d+) on \/ (\d+) off/i, "$1 days on, $2 off") + ".",
+      themes.length ? "Each week has its own technique: " + themes.join(", ") + "." : "",
+      "Pick loads that take you to failure in the listed reps.",
+      r.author ? "Program by " + tidy(r.author) + "." : ""].filter(Boolean).join(" "),
+    total_weeks: weeks.length,
+    blocks: weeks.map((w, wi) => {
+      w = obj(w);
+      const theme = tidy(w.theme);
+      return { label: "Week " + (wi + 1) + (theme ? " · " + titleCase(theme) : ""), weeks: 1, deload: /deload/i.test(theme),
+        sessions: arr(w.days).map(d => {
+          d = obj(d);
+          const title = tidy(d.title).replace(new RegExp("^" + theme.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*:\\s*", "i"), "");
+          const session = titleCase(title.replace(/"[^"]*"/g, "")).trim() + (/"([^"]+)"/.test(title) ? " (" + /"([^"]+)"/.exec(title)[1] + ")" : "");
+          return { name: session, days: Number.isInteger(d.dayIndex) ? [d.dayIndex] : [],
+            exercises: arr(d.blocks).map(b => {
+              b = obj(b);
+              const steps = [];
+              arr(b.steps).forEach(s => {
+                s = obj(s);
+                const alt = obj(arr(s.alternates)[0]);
+                const st = { name: tidy(ex(s.exerciseId).name), video: clipId(s.exerciseId), reps: stepReps(s), note: tidy(s.note), times: 1 };
+                if (alt.exerciseId && lib[alt.exerciseId]) st.alt = { name: tidy(ex(alt.exerciseId).name), video: clipId(alt.exerciseId) };
+                const last = steps[steps.length - 1];
+                if (last && last.name === st.name && last.reps === st.reps && last.note === st.note && !st.alt === !last.alt) last.times++;
+                else steps.push(st);
+              });
+              const names = [...new Set(steps.map(s => s.name))].filter(Boolean);
+              const first = arr(b.steps).map(obj)[0] || {}, rests = arr(b.steps).map(s => Number(obj(s).restSeconds) || 0);
+              /* "Exercise 1 (Drop Set - 2 Drops)", "Exercise 1 - SET 2 / REST-PAUSE" -> the technique part */
+              const tm = /^exercise\s*\d+\s*(?:\((.*)\)|-\s*(.*))?$/i.exec(tidy(b.title)) || [];
+              const technique = tidy(tm[1] || tm[2]), joined = names.join(" + ");
+              return { name: names.length > 1 && joined.length > 60 ? names[0] + " + " + (names.length - 1) + " more" : joined || tidy(b.title),
+                muscle: muscleOf(ex(first.exerciseId).category, names[0] || "", session),
+                sets: Number(b.rounds) || Math.max(1, ...arr(b.steps).map(s => Number(obj(s).sets) || 1)),
+                reps: Number((/\d+/.exec(String(first.reps || "")) || [])[0]) || 10,
+                target: /[a-z]/.test(technique) ? technique : titleCase(technique), lb: 0, rest_sec: Math.max(0, ...rests), notes: tidy(b.note), steps };
+            }) };
+        }) };
+    })
+  };
 }

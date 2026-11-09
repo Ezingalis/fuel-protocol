@@ -233,6 +233,68 @@ test("programs: chat-side conversions use the same gate as the in-app reader", a
   assert.throws(() => cleanProgram({ blocks: [] }), /no_workouts/);
 });
 
+test("routines: a fuel.routine/v1 export becomes a program whose blocks keep their steps and clips", async () => {
+  const { routineToProgram, cleanProgram } = await import("../program.js");
+  const routine = { schema: "fuel.routine/v1", name: "Test PPL", author: "coach", schedule: "6 on / 1 off (Sun\u2013Fri, Saturday rest)",
+    exercises: {
+      press: { name: "Dumbbell Press", category: "Chest / Intermediate", video: "videos/AbCdEfGh1234.mp4" },
+      fly: { name: "Cable Fly", category: null, video: "videos/../../etc.mp4" },
+      curl: { name: "Barbell Curl", category: null, video: "videos/CurlClip5678.mp4" },
+      drag: { name: "Barbell Drag Curl", category: null, video: "videos/DragClip9012.mp4" },
+      warm: { name: "Warm Up Routine", video: "videos/WarmClip3456.mp4" } },
+    weeks: [{ week: 1, theme: "DROP SET WEEK", days: [
+      { dayIndex: 0, title: 'DROP SET WEEK: PUSH DAY A "Chest Biased"', blocks: [
+        { title: "Warm Up Routine", rounds: null, steps: [{ exerciseId: "warm", sets: 1, reps: null, timeSeconds: 66 }] },
+        { title: "Exercise 1 (Drop Set - 2 Drops)", rounds: 2, note: "Use dumbbells", steps: [
+          { exerciseId: "press", sets: 2, reps: "12,10", note: "Fail at the target" },
+          { exerciseId: "press", sets: 2, reps: "10,5", note: "Drop the weight" },
+          { exerciseId: "press", sets: 2, reps: "10,5", note: "Drop the weight", restSeconds: 100 }] },
+        { title: "Exercise 2 - SET 1 / MECHANICAL DROP", rounds: 3, steps: [
+          { exerciseId: "curl", sets: 3, reps: "20", alternates: [{ exerciseId: "fly" }] },
+          { exerciseId: "drag", sets: 3, reps: null, restSeconds: 65 }] }] }] }] };
+  const p = cleanProgram(routineToProgram(routine));
+  assert.equal(p.weeks[0].label, "Week 1 · Drop Set Week");
+  assert.match(p.notes, /^6 days on, 1 off \(Sun-Fri/);
+  const s = p.weeks[0].sessions[0];
+  assert.equal(s.name, "Push Day A (Chest Biased)");
+  const [warm, press, curl] = s.exercises;
+  assert.equal(warm.steps[0].reps, "1:06");
+  assert.equal(warm.sets, 1);
+  assert.deepEqual([press.name, press.muscle, press.sets, press.reps, press.rest, press.target, press.notes],
+    ["Dumbbell Press", "chest", 2, 12, 100, "Drop Set - 2 Drops", "Use dumbbells"]);
+  assert.deepEqual(press.steps.map(x => [x.reps, x.times, x.video]),
+    [["12, 10 reps", 1, "AbCdEfGh1234"], ["10, 5 reps", 2, "AbCdEfGh1234"]], "identical drops merge into one step");
+  assert.deepEqual([curl.name, curl.muscle, curl.target], ["Barbell Curl + Barbell Drag Curl", "biceps", "Set 1 / Mechanical Drop"]);
+  assert.equal(curl.steps[1].reps, "to failure");
+  assert.deepEqual(curl.steps[0].alt, { name: "Cable Fly", video: "" }, "a clip path that isn't a plain id is dropped");
+  assert.throws(() => routineToProgram({ weeks: [] }), /not_routine/);
+});
+
+test("programs: steps survive the gate; anything that isn't a clip id never becomes a path", async () => {
+  const { cleanProgram } = await import("../program.js");
+  const e = { name: "Row", muscle: "lats", sets: 3, reps: 10, target: "", lb: 0, rest_sec: 60, notes: "",
+    steps: [{ name: "Row", video: "../../secret", reps: "10 reps", note: "", times: 99 }, { name: "", video: "AbCdEfGh1234" }] };
+  const p = cleanProgram({ program: "X", notes: "", total_weeks: 1, blocks: [{ label: "", weeks: 1, deload: false,
+    sessions: [{ name: "A", days: [], exercises: Array.from({ length: 25 }, () => e) }] }] });
+  const ex = p.weeks[0].sessions[0].exercises;
+  assert.equal(ex.length, 20, "sessions hold up to 20 exercises");
+  assert.deepEqual(ex[0].steps, [{ name: "Row", video: "", reps: "10 reps", note: "", times: 10 }]);
+  assert.ok(!("steps" in cleanProgram({ program: "Y", notes: "", total_weeks: 1, blocks: [{ label: "", weeks: 1, deload: false,
+    sessions: [{ name: "A", days: [], exercises: [Object.assign({}, e, { steps: undefined })] }] }] }).weeks[0].sessions[0].exercises[0]));
+});
+
+test("videos: demo clips play from a player outside the render tree, never cached, never committed", () => {
+  assert.ok(html.includes("if(st.length)o.st=st"), "program codes must keep exercise steps");
+  assert.ok(html.includes("function vidId(v)"), "clip ids must be checked before they become URLs");
+  assert.ok(html.includes('el.id="vbox"') && html.includes('document.body.appendChild(el)'), "player is created on demand outside #app");
+  assert.ok(html.includes('act==="vid"'), "thumbnails must open the player");
+  assert.ok(html.includes("playsinline muted loop autoplay"), "clips must play inline on iPhone");
+  assert.match(read("public/sw.js"), /startsWith\("\/media\/"\)\) return/, "service worker must leave clips to the network");
+  assert.match(wranglerCfg, /"run_worker_first":\s*\["\/media\/\*"\]/, "clips must go through the worker's sign-in check");
+  assert.ok(worker.includes("readSession(env, request)") && worker.includes("MEDIA_RE"), "media route must check the session");
+  assert.ok(gitignore.includes("public/media/"), "licensed clips must never be committed");
+});
+
 test("programs: week controls exist and every move is undoable", () => {
   for (const act of ["prognext", "progskip", "progback", "progredo", "progrestart", "progend", "progstart", "gimstart"]) {
     assert.ok(html.includes(`"${act}"`), `missing program action ${act}`);

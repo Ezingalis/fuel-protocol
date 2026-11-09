@@ -606,9 +606,47 @@ async function apiRoute(url, env) {
   return json({ error: "not found" }, 404);
 }
 
+/* Exercise demo clips and thumbnails (public/media/ex, kept out of git): licensed for the
+   account holders' own use, so only a signed-in person gets them. iPhone video needs byte
+   ranges; when the asset store answers a range with the whole file, the worker cuts it. */
+const MEDIA_RE = /^\/media\/ex\/[A-Za-z0-9]{8,80}\.(mp4|jpg)$/;
+async function media(url, request, env) {
+  const head = request.method === "HEAD";
+  if (request.method !== "GET" && !head) return new Response(null, { status: 405, headers: { Allow: "GET, HEAD" } });
+  if (!(await readSession(env, request)))
+    return new Response("Sign in to watch.", { status: 401, headers: { "Cache-Control": "no-store" } });
+  const m = MEDIA_RE.exec(url.pathname);
+  if (!m) return new Response("Not found", { status: 404 });
+  const range = request.headers.get("Range") || "";
+  const res = await env.ASSETS.fetch(new Request(url.origin + url.pathname, { headers: range ? { Range: range } : {} }));
+  if (!res.ok) return new Response("Not found", { status: 404 });
+  const headers = new Headers({
+    "Content-Type": m[1] === "mp4" ? "video/mp4" : "image/jpeg",
+    "Cache-Control": "private, max-age=2592000",
+    "Accept-Ranges": "bytes",
+    "X-Content-Type-Options": "nosniff"
+  });
+  const r = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+  if (res.status === 206 || !r || (!r[1] && !r[2])) {
+    for (const h of ["Content-Length", "Content-Range", "ETag"]) if (res.headers.get(h)) headers.set(h, res.headers.get(h));
+    return new Response(head ? null : res.body, { status: res.status, headers });
+  }
+  const buf = await res.arrayBuffer(), size = buf.byteLength;
+  let start = r[1] === "" ? Math.max(0, size - Number(r[2])) : Number(r[1]);
+  const end = r[1] === "" || r[2] === "" ? size - 1 : Math.min(Number(r[2]), size - 1);
+  if (start >= size || start > end) {
+    headers.set("Content-Range", "bytes */" + size);
+    return new Response(null, { status: 416, headers });
+  }
+  headers.set("Content-Range", "bytes " + start + "-" + end + "/" + size);
+  headers.set("Content-Length", String(end - start + 1));
+  return new Response(head ? null : buf.slice(start, end + 1), { status: 206, headers });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if (url.pathname.startsWith("/media/")) return media(url, request, env);
     if (url.pathname.startsWith("/api/")) {
       if (request.method === "OPTIONS") {
         return new Response(null, { status: 204, headers: {
