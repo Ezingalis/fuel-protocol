@@ -416,6 +416,39 @@ test("workouts: end early, discard, or delete any of them, with undo", () => {
   assert.ok(html.includes("function recomputePRs()"), "PRs must be rebuilt from what's left");
 });
 
+test("analytics: records, last-same-workout comparison, and next-time bumps come from the workouts themselves", () => {
+  const src = html.slice(html.indexOf("function e1rm("), html.indexOf("/* plates for each side"));
+  const make = DB => new Function("DB", "logDate", "fmtVol", src + "; return { logStats, exMetrics, exHist, logPRs, prevSame, nextBumps, sessKey };")(
+    DB, k => String(k).slice(0, 10), v => String(Math.round(v)));
+  const set = (lb, reps, extra) => Object.assign({ lb, reps, done: true }, extra || {});
+  const push = (lb, extra) => ({ prog: { pid: "p", w: 0, s: 0 }, name: "Push A · Week 1", t0: 1000, t1: 3601000,
+    ex: [{ n: "Press", m: "chest", sets: [set(lb, 10, extra), set(lb, 10, extra)] }] });
+  const DB = { gym: { logs: { "2026-11-09": push(40), "2026-11-16": push(45, { tr: 10 }), "2026-11-16~2": { name: "Open", t1: 0, ex: [] } } } };
+  const f = make(DB);
+  assert.deepEqual(f.logStats(DB.gym.logs["2026-11-16"]), { vol: 900, sets: 2, reps: 20, min: 60 });
+  assert.equal(f.prevSame("2026-11-16"), "2026-11-09", "same program session, earlier week");
+  const prs = f.logPRs("2026-11-16");
+  assert.deepEqual(prs.map(p => p.t), ["Heaviest weight", "Best set"]);
+  assert.equal(f.logPRs("2026-11-09").length, 0, "a first-ever exercise isn't a record");
+  assert.deepEqual(f.nextBumps("2026-11-16"), [{ n: "Press", from: 45, add: 5 }], "every target hit: add 5 lb");
+  DB.gym.logs["2026-11-16"].feel = { effort: 5 };
+  assert.deepEqual(f.nextBumps("2026-11-16"), [], "all out holds the weight");
+  DB.gym.logs["2026-11-16"].feel = {}; DB.gym.logs["2026-11-16"].ex[0].sets[1].reps = 8;
+  assert.deepEqual(f.nextBumps("2026-11-16"), [], "a missed target holds the weight");
+  assert.equal(f.exHist("Press").length, 2, "unfinished workouts don't count");
+});
+
+test("analytics: summary, stats screen, plates, live records are wired in", () => {
+  for (const a of ["sumdone", "sumsets", "feel", "gymstats", "strange", "stmetric", "stex", "exmetric"]) assert.ok(html.includes(`act==="${a}"`), `missing ${a}`);
+  assert.ok(html.includes("V.sheet={kind:\"gymlog\",ds:V.sheet.ds,sum:true}"), "finishing must open the summary");
+  assert.ok(html.includes("function applyBumps(k)") && html.includes("L.bumped=true"), "next-time bumps apply once");
+  const src = html.slice(html.indexOf("function plateText("), html.indexOf("/* what you did last time"));
+  const plateText = new Function(src + "; return plateText;")();
+  assert.match(plateText("Barbell Bench Press", 135), /<b>45<\/b>/);
+  assert.match(plateText("Barbell Squat", 185), /<b>45 · 25<\/b>/);
+  assert.equal(plateText("Dumbbell Press", 135), "", "no plates for dumbbells");
+});
+
 test("programs: week controls exist and every move is undoable", () => {
   for (const act of ["prognext", "progskip", "progback", "progredo", "progrestart", "progend", "progstart", "gimstart"]) {
     assert.ok(html.includes(`"${act}"`), `missing program action ${act}`);

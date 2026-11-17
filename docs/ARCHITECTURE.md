@@ -220,3 +220,28 @@ in Safari, not the app. Every sign-in email therefore carries a 6-digit code as 
 cutting the byte range the video player asks for (206), and otherwise goes to the
 network. Thumbnails are cached as they're seen. App updates clear the shell cache but
 never `fuel-media`.
+
+## Training analytics
+
+Every number is computed from the workouts in `DB.gym.logs`, so deleting or editing one updates
+everything. The only stored extras are each workout's answers (`log.feel`: effort 1-5, energy 1-3,
+pain 1-3, note) and next-time weight bumps (`gym.bump[exercise]`).
+
+- **Summary** (opens when a workout is finished, or when a finished one is opened): time, volume,
+  sets and reps against the last time the same session was done (`prevSame`: same program session
+  in any week, same routine, or same name), new records, each exercise's best set and est. 1RM
+  change, sets per muscle, the "how did it feel" questions, and next-time weights.
+- **Records** (`logPRs`), against every earlier workout; a first-ever exercise isn't a record:
+  heaviest weight, else best est. 1RM (Epley), else most reps (bodyweight); plus best set volume,
+  else most volume in a workout. Ticking a set that beats history shows a live record toast and a
+  trophy on the set.
+- **Next time** (`nextBumps`): when every row with a target was done at or above its target reps,
+  and the workout wasn't marked All out or that something hurt, the top weight goes up 5 lb
+  (2.5 under 30 lb). Applied once on leaving the summary, and used up by the next workout that
+  starts with that exercise.
+- **In the workout**: a "Last time" line per exercise, and plates per side for barbell lifts.
+- **Stats** (Workout tab → Stats, or Progress): a range against the one before it, weekly or
+  monthly bars (volume, sets, time, workouts), a 12-week calendar and weekly streak, working sets
+  per muscle in the last 7 days against 10-20 (a drop set or rest-pause round counts once), the
+  strongest lifts, and a page per exercise with charts (est. 1RM, heaviest, best set, volume,
+  reps), records and history.
