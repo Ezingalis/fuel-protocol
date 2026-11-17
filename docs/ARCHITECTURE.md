@@ -264,3 +264,22 @@ pain 1-3, note) and next-time weight bumps (`gym.bump[exercise]`).
 - **CSV**: export is one row per set (and per cardio session). Import reads Hevy's or Strong's export,
   converts kg, groups rows back into workouts, skips anything already imported (`log.imp`), and goes
   through `gymChange` so one undo removes it.
+
+## Layout
+
+Four tabs: **Diary · Food · Train · Progress**. Settings is the gear in each header (`topBar`), with
+Done returning to the tab you came from. Views inside a tab are a segmented control (`segCtl`):
+
+- **Food**: Meal plans | Recipes.
+- **Train**: **Today** (the workout in progress or Up next with Start, done today, quick start for an
+  empty workout or cardio, this week's day dots, a one-line recovery summary) | **Plan** (the
+  program's week, saved videos, scheduled sessions, sets per muscle, routines, programs, "Add a
+  program" for PDF or code) | **History** (month calendar and every workout and cardio session,
+  newest first).
+- **Progress**: Body & food | Training (the stats).
+
+An open workout or running cardio timer shows as a resume bar above the tab bar on every other
+screen (`paintResume`). In the workout: Finish top right, the title toggles the exercise list, weight
+before reps, "Use these" copies last time's numbers, rest has −15 / +15 / Skip with a draining
+line, the demo shrinks once the exercise is under way, and a sideways swipe moves between
+exercises. Effort is asked once per round, after its last row.

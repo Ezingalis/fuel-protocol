@@ -58,7 +58,7 @@ test("workouts: exercise library is present and well-shaped", () => {
 
 test("workouts: tab, library fetch, and session flow wired in", () => {
   assert.ok(html.includes("/exercises.json"), "app never loads the exercise library");
-  assert.ok(html.includes('["gym","Workout"]'), "Workout tab missing from tab bar");
+  assert.ok(html.includes('["gym","Train"]'), "Train tab missing from tab bar");
   for (const act of ["gymstart", "gymfinish", "gymset", "grsave", "gppick"]) {
     assert.ok(html.includes(`"${act}"`), `missing workout action ${act}`);
   }
@@ -502,6 +502,19 @@ test("training tools: per-set effort, rough-day lighter, cardio, CSV, quick star
     assert.ok(html.includes(`act==="${a}"`), `missing ${a}`);
   assert.ok(html.includes('data-src="empty"') && html.includes('if(src==="empty")'), "empty workout quick start");
   assert.ok(html.includes("function volTarget()"), "weekly targets follow the diet");
+});
+
+test("layout: four tabs, settings behind a gear, Train/Food/Progress split into views", () => {
+  assert.ok(html.includes('var tb=[["diary","Diary"],["food","Food"],["gym","Train"],["progress","Progress"]];'), "four tabs");
+  assert.match(html, /grid-template-columns:repeat\(4,1fr\)/);
+  assert.ok(html.includes('data-act="nav" data-v="settings" aria-label="Settings"'), "settings is a gear in the header");
+  assert.ok(html.includes('segCtl("trainsub",tsub,[["today","Today"],["plan","Plan"],["history","History"]])'));
+  assert.ok(html.includes('segCtl("foodsub",cur,[["plans","Meal plans"],["recipes","Recipes"]])'));
+  assert.ok(html.includes('segCtl("progsub",V.progSub||"body",[["body","Body & food"],["training","Training"]])'));
+  assert.ok(html.includes('<div id="resume"></div>') && html.includes("function paintResume()"), "an open workout shows above the tab bar");
+  assert.ok(html.includes('<button class="plfin" data-act="gymfinish">Finish</button>'), "Finish sits top right in the workout");
+  const row = html.slice(html.indexOf("    h+='<div class=\"setrow'+cls+'\">'+sn+"), html.indexOf("rowSub(ei,s,si,prev);"));
+  assert.ok(row.indexOf('data-f="lb"') < row.indexOf('data-f="reps"'), "weight comes before reps, like 135×8");
 });
 
 test("programs: week controls exist and every move is undoable", () => {
