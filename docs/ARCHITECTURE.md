@@ -180,16 +180,32 @@ a 15 s breather between mini-sets, drops and clusters none. Add/Remove work by w
 
 ## Workout flow
 
-The Workout tab leads with one card: today's session (or the one you tapped in the
-week list) with its exercise thumbnails, an estimated length, and one **Start workout**
-button. In progress it becomes **Continue workout**; finished, a summary. Week controls
-(redo, skip, back, jump, end) and saved videos live in the **Program** sheet.
+Workouts live in `DB.gym.logs`, keyed by date; a second workout that day is `"<date>~2"`, then `~3`
+(`logsOn`, `newLogKey`, `logDate`). The Workout tab shows, in order: a workout in progress
+(Continue / Finish now / Discard), what's done today, **Up next** (Start or Preview), the
+program's week, and recent workouts. Any of them opens in the player.
 
-Starting opens the player (`#player`): full screen, one exercise at a time, the demo
-looping on top, the rows below, rest timer and Next/Finish pinned to the bottom, and a
-list view to jump around. It renders into its own root outside `#app` and repaints only
-the parts that changed (`paintPlayer`), so ticking a set or the rest timer never reloads
-the video. The screen is kept awake (Screen Wake Lock) while it's open.
+**Up next** is the session after the last one done in the current week, moving into the next week
+when the current one runs out (`progState().up`). A missed day never holds the program up: it shows
+as Missed (or "left undone in earlier weeks") and can still be done, or marked done outside the
+app, from its preview. Doing a later week's session moves the program's week forward.
+
+The player (`#player`) shows one exercise at a time: the demo looping on top, the rows below, rest
+timer and Next/Finish pinned to the bottom, a list view, and a menu (finish now, discard, delete,
+edit sets). The same screen previews any program session read-only (`kind: "gymprev"`) with
+Start at the bottom; the program view lists weeks and sessions and opens these previews. It
+renders into its own root outside `#app` and repaints only what changed (`paintPlayer`), never
+the number box being typed in, so ticking a set or the rest timer never reloads the video. The
+screen is kept awake (Screen Wake Lock) while a workout is open.
+
+Reps and weight can be typed or stepped. A change flows forward only (`setField`): later sets
+that still hold the old value follow it; a ticked set or one already set to something else stops
+it. In a drop set only the same row of later rounds follows; rest-pause and cluster mini-sets
+share the main set's weight. `touch-action: manipulation` and 16 px inputs stop iOS zooming.
+
+Deleting or discarding a workout, and marking a session done or not done, go through
+`gymChange`: one undo restores both the workouts and the program, and PRs are rebuilt from the
+remaining workouts (`recomputePRs`).
 
 ## Home Screen app and offline videos
 

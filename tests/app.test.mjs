@@ -328,9 +328,9 @@ test("workout: one Start card, a full-screen player outside the render tree, scr
   assert.ok(html.includes("function sessionHero("), "today's session is one card with one Start button");
   assert.ok(html.includes('root.id="player"') && html.includes("document.body.appendChild(root)"), "the player lives outside #app");
   assert.ok(html.includes("if(key!==PL.mkey)"), "the video is only replaced when the exercise changes");
-  assert.ok(html.includes('if(V.sheet&&V.sheet.kind==="gymlog"){paintPlayer();return;}'), "ticking a set repaints the player, not the page");
+  assert.ok(html.includes('if(V.sheet&&(V.sheet.kind==="gymlog"||V.sheet.kind==="gymprev")){paintPlayer();return;}'), "ticking a set repaints the player, not the page");
   assert.ok(html.includes('navigator.wakeLock.request("screen")'), "the screen stays on mid-workout");
-  for (const a of ["plgo", "pllist", "plclose", "gymrest30", "gymsel", "progopts", "vsave", "install"])
+  for (const a of ["plgo", "pllist", "plclose", "gymrest30", "prevopen", "prevstart", "prevdone", "prevundone", "gymdel", "plmenu", "progopts", "vsave", "install"])
     assert.ok(html.includes(`act==="${a}"`), `missing action ${a}`);
 });
 
@@ -360,6 +360,60 @@ test("offline: the service worker cuts a saved clip to the byte range the player
   assert.equal((await sliced(clip(), "bytes=90-")).headers.get("content-range"), "bytes 90-99/100");
   assert.equal((await sliced(clip(), "bytes=-5")).headers.get("content-range"), "bytes 95-99/100");
   assert.equal((await sliced(clip(), "bytes=500-")).status, 416);
+});
+
+test("sets: typed numbers flow forward only, and stop at a ticked set or one already changed", () => {
+  const src = html.slice(html.indexOf("function setField("), html.indexOf("function setInput("));
+  const setField = new Function(src + "; return setField;")();
+  const ex = { sets: [{ lb: 0, reps: 10 }, { lb: 0, reps: 10 }, { lb: 0, reps: 10 }, { lb: 0, reps: 10 }] };
+  setField(ex, 0, "lb", 20);
+  assert.deepEqual(ex.sets.map(x => x.lb), [20, 20, 20, 20], "set 1 fills the rest");
+  setField(ex, 1, "lb", 25);
+  assert.deepEqual(ex.sets.map(x => x.lb), [20, 25, 25, 25], "set 2 never touches set 1");
+  setField(ex, 0, "lb", 22);
+  assert.deepEqual(ex.sets.map(x => x.lb), [22, 25, 25, 25], "a set already changed stops the flow");
+  ex.sets[2].done = true; setField(ex, 1, "lb", 30);
+  assert.deepEqual(ex.sets.map(x => x.lb), [22, 30, 25, 25], "a ticked set is never overwritten");
+  const drop = { sets: [{ g: 1, p: 0, lb: 0 }, { g: 1, p: 1, lb: 0 }, { g: 2, p: 0, lb: 0 }, { g: 2, p: 1, lb: 0 }] };
+  setField(drop, 0, "lb", 50);
+  assert.deepEqual(drop.sets.map(x => x.lb), [50, 0, 50, 0], "a drop set's Top flows to the next round's Top only");
+  const rp = { sets: [{ g: 1, p: 0, k: "Main", lb: 0, reps: 15 }, { g: 1, p: 1, k: "Mini 1", lb: 0, reps: 6 }, { g: 2, p: 0, k: "Main", lb: 0, reps: 12 }] };
+  setField(rp, 0, "lb", 40);
+  assert.deepEqual(rp.sets.map(x => x.lb), [40, 40, 40], "rest-pause minis share the main set's weight");
+  setField(rp, 0, "reps", 14);
+  assert.deepEqual(rp.sets.map(x => x.reps), [14, 6, 12], "but reps stay per row");
+  assert.match(html, /html\{touch-action:manipulation\}/, "double-tap zoom must be off");
+  assert.match(html, /\.setin\{[^}]*font-size:16px/, "number boxes under 16px make iPhone zoom in");
+});
+
+test("days and programs: several workouts a day, and a missed day never holds the program up", () => {
+  const helpers = html.slice(html.indexOf("function progState("), html.indexOf("/* best set per exercise"));
+  const make = DB => new Function("DB", "progById", helpers + "; return { progState, logDate, logsOn, newLogKey };")(DB, () => DB.p);
+  const ses = n => ({ name: n, ex: [] });
+  const p = { id: "p", weeks: [{ sessions: ["A", "B", "C"].map(ses) }, { sessions: ["A2", "B2", "C2"].map(ses) }] };
+  const DB = { p, gym: { active: { pid: "p", w: 0, done: { "0|0": "2026-11-09", "0|1": "2026-11-10" } },
+    logs: { "2026-11-16": {}, "2026-11-16~2": {}, "2026-11-17": {} } } };
+  const f = make(DB);
+  assert.deepEqual(f.logsOn("2026-11-16"), ["2026-11-16", "2026-11-16~2"]);
+  assert.equal(f.newLogKey("2026-11-16"), "2026-11-16~3");
+  assert.equal(f.newLogKey("2026-11-18"), "2026-11-18");
+  assert.equal(f.logDate("2026-11-16~2"), "2026-11-16");
+  let st = f.progState();
+  assert.deepEqual([st.up.w, st.up.s], [0, 2], "next after the last done");
+  DB.gym.active.done = { "0|0": "x", "0|1": "x", "1|0": "2026-11-16" }; DB.gym.active.w = 1;
+  st = f.progState();
+  assert.deepEqual([st.up.w, st.up.s], [1, 1], "week 1's missed C doesn't block week 2");
+  DB.gym.active = { pid: "p", w: 0, done: { "0|0": "x", "0|2": "x" } };
+  st = f.progState();
+  assert.deepEqual([st.up.w, st.up.s], [1, 0], "nothing left after the last done moves on to the next week");
+  assert.deepEqual(st.missed, [1], "and remembers what was missed");
+});
+
+test("workouts: end early, discard, or delete any of them, with undo", () => {
+  assert.ok(html.includes('act==="gymdel"') && html.includes("UNDO.glogs=sl"), "deleting a workout must be undoable");
+  assert.ok(html.includes('if(UNDO.glogs!=null){DB.gym.logs=JSON.parse(UNDO.glogs);recomputePRs();}'), "undo must restore the workout and PRs");
+  assert.ok(html.includes('"Finish workout now"') && html.includes('"Discard this workout"') && html.includes('"Delete this workout"'));
+  assert.ok(html.includes("function recomputePRs()"), "PRs must be rebuilt from what's left");
 });
 
 test("programs: week controls exist and every move is undoable", () => {
