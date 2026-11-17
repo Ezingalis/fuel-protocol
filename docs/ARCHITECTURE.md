@@ -245,3 +245,22 @@ pain 1-3, note) and next-time weight bumps (`gym.bump[exercise]`).
   per muscle in the last 7 days against 10-20 (a drop set or rest-pause round counts once), the
   strongest lifts, and a page per exercise with charts (est. 1RM, heaviest, best set, volume,
   reps), records and history.
+
+## Training tools
+
+- **Effort per set**: after ticking a set, a strip asks RPE 6-10 (stored as `set.rpe`; "Stop asking"
+  sets `profile.noRPE`, and the player menu turns it back on). Ticked rows show an arrow against the
+  same row last time (`prevExSets` + `lastRow`).
+- **Muscle credit** (`muscleSets`): the main muscle counts a full working set, muscles that help count
+  half (`helperMuscles`, by movement pattern); a drop/rest-pause/cluster round counts once
+  (`workSets`). Weekly targets follow the diet (`volTarget`): 8-16 below maintenance, 10-20 at it,
+  12-22 above.
+- **Recovery** (`recovery`): sets from the last two weeks fade by half every 36 h (48 h for legs and
+  lower back): worked hard (6+), recovering (2-6), ready, or not trained in 10 days.
+- **Rough day**: before the first set, "Go 10% lighter" scales today's weights (originals kept in
+  `set.lb0`, one tap puts them back).
+- **Cardio**: a log with `log.cardio` {type, min, mi, hr, eff, cal, note}; live timer in
+  `gym.cardioLive`. Calories = MET × kg × hours × effort (0.8 / 1 / 1.25).
+- **CSV**: export is one row per set (and per cardio session). Import reads Hevy's or Strong's export,
+  converts kg, groups rows back into workouts, skips anything already imported (`log.imp`), and goes
+  through `gymChange` so one undo removes it.

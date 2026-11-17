@@ -449,6 +449,61 @@ test("analytics: summary, stats screen, plates, live records are wired in", () =
   assert.equal(plateText("Dumbbell Press", 135), "", "no plates for dumbbells");
 });
 
+test("import: Hevy and Strong CSV exports become workouts; a second import skips what's there", () => {
+  const src = html.slice(html.indexOf("/* ---------------- cardio ----------------"), html.indexOf("/* ---------------- training stats ----------------"));
+  const DB = { profile: { weightLb: 180 }, gym: { logs: {} } };
+  const f = new Function("DB", src + "; return { importPlan, parseCSV, cardioCal };")(DB);
+  const hevy = [
+    '"title","start_time","end_time","description","exercise_title","superset_id","exercise_notes","set_index","set_type","weight_lbs","reps","distance_miles","duration_seconds","rpe"',
+    '"Push A","28 Mar 2025, 18:05","28 Mar 2025, 19:10","felt good","Bench Press (Barbell)","","","0","warmup","95","10","","",""',
+    '"Push A","28 Mar 2025, 18:05","28 Mar 2025, 19:10","felt good","Bench Press (Barbell)","","","1","normal","185","8","","","8"',
+    '"Push A","28 Mar 2025, 18:05","28 Mar 2025, 19:10","felt good","Lateral Raise (Dumbbell)","","","0","normal","20","15","","",""',
+    '"Morning Run","29 Mar 2025, 07:00","29 Mar 2025, 07:31","","Running","","","0","normal","","","3.1","1860",""'].join("\n");
+  const p = f.importPlan(hevy, "lb");
+  assert.equal(p.src, "Hevy");
+  assert.equal(p.items.length, 2);
+  const push = p.items[0];
+  assert.equal(push.ds, "2025-03-28");
+  assert.equal(push.log.name, "Push A");
+  assert.equal((push.log.t1 - push.log.t0) / 60000, 65);
+  assert.deepEqual(push.log.ex.map(e => [e.n, e.m, e.sets.length]), [["Bench Press (Barbell)", "chest", 2], ["Lateral Raise (Dumbbell)", "shoulders", 1]]);
+  assert.deepEqual(push.log.ex[0].sets, [{ reps: 10, lb: 95, done: true, k: "W" }, { reps: 8, lb: 185, done: true, rpe: 8 }]);
+  assert.deepEqual([p.items[1].log.cardio.type, p.items[1].log.cardio.min, p.items[1].log.cardio.mi], ["run", 31, 3.1]);
+  p.items.forEach((it, i) => { DB.gym.logs["k" + i] = it.log; });
+  const again = f.importPlan(hevy, "lb");
+  assert.deepEqual([again.items.length, again.skip], [0, 2], "already imported workouts are skipped");
+  const strong = ["Date;Workout Name;Duration;Exercise Name;Set Order;Weight;Reps;Distance;Seconds;Notes;Workout Notes;RPE",
+    "2024-01-15 18:30:00;Legs;1h 5m;Squat (Barbell);1;100;5;0;0;;;", "2024-01-15 18:30:00;Legs;1h 5m;Squat (Barbell);2;100;5;0;0;;;"].join("\n");
+  const sp = f.importPlan(strong, "kg");
+  assert.equal(sp.src, "Strong");
+  assert.equal(sp.unitAsk, true, "Strong files without a unit column ask lb or kg");
+  assert.deepEqual(sp.items[0].log.ex[0].sets.map(x => x.lb), [220.5, 220.5], "kg converted to lb");
+  assert.equal((sp.items[0].log.t1 - sp.items[0].log.t0) / 60000, 65);
+  assert.deepEqual(f.parseCSV('a,"b, ""c""",d\n1,2,3'), [["a", 'b, "c"', "d"], ["1", "2", "3"]]);
+  assert.equal(f.cardioCal("run", 30, 2), 400, "MET 9.8 × 81.6 kg × 0.5 h");
+  assert.match(f.importPlan("x,y\n1,2", "lb").err, /Hevy or Strong/);
+});
+
+test("muscles: helpers count half, a drop round counts once, and recovery fades with time", () => {
+  const src = html.slice(html.indexOf("function workSets("), html.indexOf("function finishedKeys("));
+  const src2 = html.slice(html.indexOf("/* The main muscle gets a full set"), html.indexOf("function fmtSets("));
+  const f = new Function(src + src2 + "; return { workSets, muscleSets, helperMuscles };")();
+  const sets = n => Array.from({ length: n }, () => ({ done: true }));
+  const L = { ex: [{ n: "Incline Dumbbell Press", m: "chest", sets: sets(3) }, { n: "Barbell Row", m: "lats", sets: sets(2) },
+    { n: "Lateral Raise", m: "shoulders", sets: [{ g: 1, p: 0, done: true }, { g: 1, p: 1, done: true }, { g: 2, p: 0, done: true }] }] };
+  assert.deepEqual(f.muscleSets(L), { chest: 3, triceps: 1.5, shoulders: 3.5, lats: 2, biceps: 1, "middle back": 1 });
+  assert.deepEqual(f.helperMuscles("Cable Fly", "chest"), [], "a fly has no helpers");
+  const rec = html.slice(html.indexOf("var LEGS_RE="), html.indexOf("/* under a ticked row"));
+  assert.ok(rec.includes("Math.pow(0.5,hrs/(LEGS_RE.test(m)?48:36))"), "sets fade by half every 36 h, 48 h for legs");
+});
+
+test("training tools: per-set effort, rough-day lighter, cardio, CSV, quick start are wired in", () => {
+  for (const a of ["rpe", "rpeskip", "rpeoff", "rpeon", "lighter", "cardio", "cdsave", "cdstart", "cdstop", "cdcancel", "csvexport", "csvgo"])
+    assert.ok(html.includes(`act==="${a}"`), `missing ${a}`);
+  assert.ok(html.includes('data-src="empty"') && html.includes('if(src==="empty")'), "empty workout quick start");
+  assert.ok(html.includes("function volTarget()"), "weekly targets follow the diet");
+});
+
 test("programs: week controls exist and every move is undoable", () => {
   for (const act of ["prognext", "progskip", "progback", "progredo", "progrestart", "progend", "progstart", "gimstart"]) {
     assert.ok(html.includes(`"${act}"`), `missing program action ${act}`);

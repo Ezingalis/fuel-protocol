@@ -355,6 +355,31 @@ html{touch-action:manipulation}
 .setrow.ro.lb2{grid-template-columns:34px 1fr 1fr}
 .rov{background:var(--card2);border-radius:var(--r-sm);padding:9px 10px;text-align:center;font-weight:650;font-size:14px}
 .rov.sub{color:var(--sub);font-weight:550}
+/* per-set effort and vs last time */
+.rowsub{display:flex;justify-content:space-between;gap:8px;margin:-2px 48px 4px 34px;font-size:12px;color:var(--faint)}
+.rowsub .vs{display:inline-flex;align-items:center;gap:4px}
+.rowsub .vs .ic{width:13px;height:13px}
+.rowsub .vs.up{color:var(--green2)}
+.rowsub .vs.dn{color:var(--amber)}
+.rowsub .rpev{font-weight:650;color:var(--sub)}
+.rpestrip{margin:2px 0 8px;padding:10px 12px;border-radius:var(--r-sm);background:var(--card2)}
+.rpestrip .rq{font-size:12.5px;color:var(--sub);line-height:1.4}
+.rpestrip .rq b{color:var(--ink);font-weight:650}
+.rpeb{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin:8px 0 2px}
+.rpeb button{height:36px;border-radius:9px;background:var(--card);box-shadow:inset 0 0 0 1px var(--line);font-size:14px;font-weight:650;color:var(--ink)}
+.rpeb button.on{background:var(--green);color:var(--onAccent);box-shadow:none}
+/* quick start, cardio, rough day */
+.qstart .chips{margin-top:8px}
+.qstart .chip .ic{width:15px;height:15px}
+.frow3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.frow3 input{width:100%}
+.lighter{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:8px 12px;border-radius:var(--r-sm);background:var(--card2);font-size:13px;color:var(--sub)}
+.lighter .textbtn{padding:0;flex:0 0 auto}
+/* recovery */
+.rcrow{display:flex;gap:10px;align-items:baseline;margin-top:10px}
+.rcl{flex:0 0 84px;font-size:12.5px;font-weight:600;color:var(--sub)}
+.chip.rch{background:color-mix(in srgb,var(--amber) 22%,var(--card));color:var(--amber);box-shadow:none}
+.chip.rcm{background:var(--amberSoft);color:var(--amber);box-shadow:none}
 /* training stats */
 .calgrid{display:flex;gap:4px;margin-top:12px}
 .calcol{display:flex;flex-direction:column;gap:4px;flex:1}
@@ -1078,7 +1103,7 @@ function renderDiary(){
     h+='<div class="card"><div class="mealhd"><span class="mt">Workout'+(gks.length>1?'s':'')+'</span></div>';
     gks.forEach(function(k){var L=DB.gym.logs[k],v=gymVol(L);
       h+='<button class="wkrow" data-act="gymopen" data-k="'+k+'"><span class="grow"><span class="ln">'+esc(L.name)+'</span><br><span class="ls num">'+
-        (L.off?"Done outside the app":!L.t1?"In progress · tap to continue":v.sets+' sets · '+fmtVol(v.vol)+' lb')+'</span></span>'+
+        esc(!L.t1?"In progress · tap to continue":logLine(L))+'</span></span>'+
         (L.t1?'<span style="color:var(--green)">'+IC("checkc")+'</span>':'<span class="tag now">Open</span>')+'</button>';});
     h+='</div>';
   }else if(planFor(V.date)){
@@ -1333,6 +1358,7 @@ function planFor(ds){var pl=DB.gym.plan[ds],p=pl&&progById(pl.pid);
 function gymStart(ds,src,s,w){
   var g=DB.gym,ps=progState(),pf=planFor(ds),log=null;
   if(!src)src=pf?"plan":ps&&ps.up?"prog":"routine";
+  if(src==="empty")log={rid:null,name:"Workout",ex:[],t0:Date.now(),t1:0};else
   if(src==="plan"&&pf){log=progLog(pf.p,pf.w,pf.s,true);delete g.plan[ds];}
   else if(src==="prog"&&ps){
     var ww=w>=0?w:ps.up?ps.up.w:ps.a.w,ss=s>=0?s:ps.up&&ww===ps.up.w?ps.up.s:0;
@@ -1353,7 +1379,9 @@ function gymStart(ds,src,s,w){
 }
 function bumpR(n,ls){var b=DB.gym.bump&&DB.gym.bump[n];return b&&ls&&ls.lb>0?b:0;}
 function startSession(p,w,s){var key=newLogKey(todayStr()),log=progLog(p,w,s,true);if(!log)return;DB.gym.logs[key]=log;save();PL.prev=null;gymOpenKey(key);}
-function gymOpenKey(k){var L=DB.gym.logs[k];if(!L)return;V.sheet={kind:"gymlog",ds:k,sum:!!L.t1};render();}
+function gymOpenKey(k){var L=DB.gym.logs[k];if(!L)return;
+  if(L.cardio){var c=L.cardio;V.sheet={kind:"cardio",k:k,type:c.type,min:c.min,mi:c.mi,hr:c.hr,eff:c.eff,note:c.note};render();return;}
+  V.sheet={kind:"gymlog",ds:k,sum:!!L.t1};render();}
 /* leaving a summary: its next-time bumps go in once, and only if nothing newer did these exercises */
 function applyBumps(k){var L=DB.gym.logs[k];if(!L||!L.t1||L.bumped)return;
   var later=finishedKeys().filter(function(k2){return k2>k;});
@@ -1483,7 +1511,46 @@ function exHist(name,before){var out=[];
   finishedKeys().forEach(function(k){if(before&&k>=before)return;var m=exMetrics(DB.gym.logs[k],name);if(m.sets)out.push({k:k,ds:logDate(k),m:m});});
   return out;}
 function exBest(hist){var b={heavy:0,e1:0,setVol:0,vol:0,topReps:0};hist.forEach(function(h){for(var f in b)if(h.m[f]>b[f])b[f]=h.m[f];});return b;}
-function setTxt(x){return x?(x.lb>0?x.lb+"×"+x.reps:x.reps+" reps"):"";}
+function setTxt(x){return x?(x.lb>0?x.lb+"×"+x.reps:x.reps+" reps")+(x.rpe?" @"+x.rpe:""):"";}
+/* the last finished workout's rows for this exercise (all its blocks), to compare set by set */
+function prevExSets(name,before){var ks=finishedKeys();
+  for(var i=ks.length-1;i>=0;i--){if(before&&ks[i]>=before)continue;var out=[];
+    (DB.gym.logs[ks[i]].ex||[]).forEach(function(e){if(e.n===name)out=out.concat(e.sets);});
+    if(out.some(function(x){return x.done;}))return out;}
+  return null;}
+/* The main muscle gets a full set; the muscles that help get half (a press also works triceps and
+   front delts, a row works biceps). Movement patterns, judged by name; the counting idea is the
+   fractional-set approach body.build and openGym use, rebuilt here from scratch. */
+function helperMuscles(name,m){var n=String(name||"");
+  if(m==="chest")return /fly|flye|crossover|pec.?deck|pullover/i.test(n)?[]:["triceps","shoulders"];
+  if(m==="shoulders")return /press|arnold/i.test(n)?["triceps"]:/rear|reverse fly|face pull/i.test(n)?["middle back"]:[];
+  if(m==="triceps")return /press|dip|bench/i.test(n)&&!/extension|skull|pushdown|kickback/i.test(n)?["chest"]:[];
+  if(m==="lats")return /\brows?\b/i.test(n)?["biceps","middle back"]:/pull-?ups?|chin|pull ?down/i.test(n)?["biceps"]:[];
+  if(m==="middle back")return /\brows?\b/i.test(n)?["biceps","lats"]:[];
+  if(m==="biceps")return /hammer|reverse|zottman/i.test(n)?["forearms"]:[];
+  if(m==="quadriceps")return /squat|lunge|leg press|split|step.?up|hack/i.test(n)&&!/sissy/i.test(n)?["glutes"]:[];
+  if(m==="hamstrings")return /rdl|romanian|stiff|deadlift|good morning/i.test(n)?["glutes","lower back"]:[];
+  if(m==="glutes")return /thrust|bridge/i.test(n)?["hamstrings"]:/lunge|squat|step.?up/i.test(n)?["quadriceps"]:[];
+  if(m==="lower back")return /extension|hyper/i.test(n)?["glutes","hamstrings"]:[];
+  return [];}
+function muscleSets(L,acc){acc=acc||{};
+  (L.ex||[]).forEach(function(ex){var n=workSets(ex);if(!n||!ex.m||ex.m==="other")return;
+    acc[ex.m]=(acc[ex.m]||0)+n;helperMuscles(ex.n,ex.m).forEach(function(hm){acc[hm]=(acc[hm]||0)+n*0.5;});});
+  return acc;}
+function fmtSets(v){return String(Math.round(v*2)/2);}
+/* weekly sets per muscle to aim for: less while eating below maintenance (recovery is slower), more above */
+function volTarget(){var diff=calTarget()-tdee();
+  return diff<=-250?{lo:8,hi:16,why:"while you’re eating below maintenance"}:diff>=150?{lo:12,hi:22,why:"while you’re eating above maintenance"}:{lo:10,hi:20,why:""};}
+/* how worked each muscle still is: sets fade by half every 36 h (48 h for legs and lower back) */
+var LEGS_RE=/quadriceps|hamstrings|glutes|calves|adductors|abductors|lower back/;
+var MAIN_MUSCLES=["chest","shoulders","triceps","biceps","lats","middle back","traps","forearms","abdominals","quadriceps","hamstrings","glutes","calves","lower back"];
+function recovery(){var now=Date.now(),f={},last={};
+  Object.keys(DB.gym.logs).forEach(function(k){var L=DB.gym.logs[k];if(!L.t1||L.cardio)return;var hrs=Math.max(0,(now-L.t1)/36e5);if(hrs>24*14)return;
+    var ms=muscleSets(L);Object.keys(ms).forEach(function(m){f[m]=(f[m]||0)+ms[m]*Math.pow(0.5,hrs/(LEGS_RE.test(m)?48:36));if(!last[m]||L.t1>last[m])last[m]=L.t1;});});
+  var out={ready:[],recovering:[],hard:[],idle:[]};
+  MAIN_MUSCLES.forEach(function(m){var v=f[m]||0,ago=last[m]?(now-last[m])/864e5:99;
+    if(ago>10)out.idle.push(m);else if(v>=6)out.hard.push(m);else if(v>=2)out.recovering.push(m);else out.ready.push(m);});
+  return out;}
 /* "the same workout": the same program session (any week), the same routine, or the same name */
 function sessKey(L){return L.prog?"p:"+L.prog.pid+":"+L.prog.s:L.rid?"r:"+L.rid:"n:"+String(L.name||"").replace(/\s·\sWeek \d+$/,"");}
 function prevSame(k){var L=DB.gym.logs[k],sk=sessKey(L),out=null;
@@ -1538,15 +1605,135 @@ function summaryHtml(k){
     rows+='<div class="kv"><span>'+esc(ex.n)+'<br><span class="ls num">'+c.sets+' set'+(c.sets===1?'':'s')+' · best '+setTxt(c.best)+(pl?' · last time '+setTxt(pl.m.best):'')+'</span></span>'+
       (d!=null?'<b class="dl '+(d>0?"up":d<0?"dn":"")+'">'+(d>0?"+":"")+d+'%</b>':'<b class="ls">new</b>')+'</div>';});
   if(rows)h+='<div class="card sumcard"><div class="mealhd"><span class="mt">Exercises</span><span class="mcal">est. 1RM vs last time</span></div>'+rows+'</div>';
-  var mus={};(L.ex||[]).forEach(function(ex){var n=workSets(ex);if(n)mus[ex.m]=(mus[ex.m]||0)+n;});
+  var mus=muscleSets(L);
   var mk=Object.keys(mus).sort(function(a,b){return mus[b]-mus[a];});
-  if(mk.length)h+='<div class="chips" style="margin-top:12px">'+mk.map(function(m){return '<span class="chip">'+esc(m)+' · '+mus[m]+'</span>';}).join("")+'</div>';
+  if(mk.length)h+='<div class="chips" style="margin-top:12px">'+mk.map(function(m){return '<span class="chip">'+esc(m)+' · '+fmtSets(mus[m])+'</span>';}).join("")+'</div>';
   h+='<div class="card sumcard"><div class="mt">How did it feel?</div>'+feelRow(L,"effort","Effort")+feelRow(L,"energy","Energy")+feelRow(L,"pain","Anything hurt?")+
      '<div class="flabel">Notes</div><input id="feelnote" placeholder="Anything to remember for next time" value="'+esc((L.feel||{}).note||"")+'"></div>';
   var nb=nextBumps(k);
   if(nb.length){h+='<div class="card sumcard"><div class="mealhd"><span class="mt">Next time</span><span class="mcal">you hit every target</span></div>';
     nb.forEach(function(b){h+='<div class="kv"><span>'+esc(b.n)+'</span><b class="num" style="color:var(--green2)">'+b.from+' → '+(b.from+b.add)+' lb</b></div>';});
     h+='<div class="fnote">These go into the next workout with these exercises. Marking it All out or that something hurt holds the weights.</div></div>';}
+  return h;
+}
+/* ---------------- cardio ----------------
+   A run, ride or walk is a workout too: same log (log.cardio), so it shows in today's list, the
+   calendar, streaks and time totals. Start a live timer, or log one already done. Calories are an
+   estimate: activity MET × body weight × time, scaled by effort. */
+var CARDIO={run:["Run",9.8],walk:["Walk",3.5],ride:["Ride",7.5],row:["Row",7],stairs:["Stairs",8.8],elliptical:["Elliptical",5],swim:["Swim",7],hike:["Hike",6],other:["Other",6]};
+var CEFF=["Easy","Moderate","Hard"];
+function cardioCal(type,min,eff){var met=(CARDIO[type]||CARDIO.other)[1]*[0.8,1,1.25][(eff||2)-1];return Math.round(met*(DB.profile.weightLb||170)*0.45359*(min||0)/60);}
+function logLine(L){
+  if(L.cardio){var c=L.cardio;return [c.min+" min",c.mi?c.mi+" mi":"",c.cal?"about "+c.cal+" cal":""].filter(Boolean).join(" · ");}
+  if(L.off)return "Done outside the app";
+  if(!L.t1)return "In progress";
+  var v=gymVol(L);return v.sets+" sets · "+fmtVol(v.vol)+" lb · "+Math.max(1,Math.round((L.t1-L.t0)/60000))+" min";}
+function cardioBody(){
+  var sh=V.sheet,h='',t=sh.type||"run",lab=(CARDIO[t]||CARDIO.other)[0];
+  h+='<div class="chips" style="margin-top:0">'+Object.keys(CARDIO).map(function(k){return '<button class="chip'+(k===t?" on":"")+'" data-act="cdtype" data-v="'+k+'">'+CARDIO[k][0]+'</button>';}).join("")+'</div>';
+  if(!sh.k&&!sh.live)h+='<button class="bigbtn" data-act="cdstart">'+IC("play")+'Start a '+lab.toLowerCase()+' timer</button><div class="reshd">Or log one you already did</div>';
+  h+='<div class="frow3"><div><div class="flabel">Minutes</div><input id="cdmin" inputmode="numeric" value="'+(sh.min||"")+'" placeholder="30"></div>'+
+     '<div><div class="flabel">Miles</div><input id="cdmi" inputmode="decimal" value="'+(sh.mi||"")+'" placeholder="optional"></div>'+
+     '<div><div class="flabel">Avg heart rate</div><input id="cdhr" inputmode="numeric" value="'+(sh.hr||"")+'" placeholder="optional"></div></div>'+
+     '<div class="flabel">Effort</div><div class="chips" style="margin-top:6px">'+CEFF.map(function(e,i){return '<button class="chip'+((sh.eff||2)===i+1?" on":"")+'" data-act="cdeff" data-v="'+(i+1)+'">'+e+'</button>';}).join("")+'</div>';
+  if(!sh.k&&!sh.live)h+='<div class="flabel">When</div><div class="chips" style="margin-top:6px"><button class="chip'+(sh.day!==-1?" on":"")+'" data-act="cdday" data-v="0">Today</button><button class="chip'+(sh.day===-1?" on":"")+'" data-act="cdday" data-v="-1">Yesterday</button></div>';
+  h+='<div class="flabel">Notes</div><input id="cdnote" value="'+esc(sh.note||"")+'" placeholder="Route, intervals, how it felt">';
+  if(sh.min>0)h+='<div class="okline num">About '+cardioCal(t,sh.min,sh.eff)+' calories at '+Math.round(DB.profile.weightLb||170)+' lb</div>';
+  h+='<div class="sfoot"><button class="bigbtn" data-act="cdsave">'+(sh.k?"Save changes":"Save "+lab.toLowerCase())+'</button>'+
+     (sh.k?'<div style="text-align:center"><button class="textbtn danger" data-act="gymdel" data-k="'+sh.k+'">'+IC("trash")+'Delete</button></div>':'')+'</div>';
+  return h;
+}
+function cardioRead(){var sh=V.sheet,g=function(id){var e=document.getElementById(id);return e?e.value:"";};
+  sh.min=Math.max(0,Math.round(+g("cdmin")||0));sh.mi=Math.max(0,Math.round((+String(g("cdmi")).replace(",",".")||0)*100)/100);
+  sh.hr=Math.max(0,Math.round(+g("cdhr")||0));sh.note=String(g("cdnote")).slice(0,300);}
+function cardioSave(){
+  cardioRead();var sh=V.sheet,t=sh.type||"run";if(!(sh.min>0)){sh.err=true;rerenderSheet();return;}
+  var c={type:t,min:sh.min,mi:sh.mi||0,hr:sh.hr||0,eff:sh.eff||2,note:sh.note||"",cal:cardioCal(t,sh.min,sh.eff)},name=CARDIO[t][0]+" · "+sh.min+" min";
+  if(sh.k){var L=DB.gym.logs[sh.k];if(L){L.cardio=c;L.name=name;L.t1=L.t0+sh.min*60000;}}
+  else{var ds=sh.live?todayStr():dateAdd(todayStr(),sh.day===-1?-1:0),t0=sh.live?sh.t0:Date.now()-sh.min*60000-(sh.day===-1?864e5:0);
+    DB.gym.logs[newLogKey(ds)]={rid:null,name:name,cardio:c,ex:[],t0:t0,t1:t0+sh.min*60000};
+    if(sh.live)delete DB.gym.cardioLive;}
+  save();V.sheet=null;render();showUndo(name+" saved · about "+c.cal+" cal",null);
+}
+/* ---------------- workouts in and out as CSV ----------------
+   Export: one row per set (and one per cardio session). Import: Hevy's or Strong's CSV export,
+   grouped back into workouts; anything already imported is skipped, and one undo removes it all. */
+function csvCell(v){v=v==null?"":String(v);return /[",\n;]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+function exportWorkoutsCSV(){
+  var rows=[["date","workout","started","finished","exercise","set","label","weight_lb","reps","rpe","done","cardio","minutes","miles","calories","notes"]];
+  var iso=function(t){return t?new Date(t).toISOString():"";};
+  Object.keys(DB.gym.logs).sort().forEach(function(k){var L=DB.gym.logs[k],base=[logDate(k),L.name,iso(L.t0),iso(L.t1)];
+    if(L.cardio){var c=L.cardio;rows.push(base.concat(["","","","","","","",c.type,c.min,c.mi||"",c.cal||"",c.note||""]));return;}
+    (L.ex||[]).forEach(function(ex){ex.sets.forEach(function(x,i){rows.push(base.concat([ex.n,i+1,x.k||"",x.t?"":x.lb||0,x.t?x.t:x.reps||0,x.rpe||"",x.done?1:0,"","","","",i===0&&L.feel&&L.feel.note?L.feel.note:""]));});});});
+  var csv=rows.map(function(r){return r.map(csvCell).join(",");}).join("\n"),a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="fuel-workouts-"+todayStr()+".csv";document.body.appendChild(a);a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},2000);
+  showUndo("Exported "+(rows.length-1)+" rows",null);
+}
+function parseCSV(text){
+  var first=text.split(/\r?\n/)[0]||"",d=(first.match(/;/g)||[]).length>(first.match(/,/g)||[]).length?";":",",rows=[],row=[],cell="",q=false;
+  for(var i=0;i<text.length;i++){var c=text[i];
+    if(q){if(c==='"'){if(text[i+1]==='"'){cell+='"';i++;}else q=false;}else cell+=c;}
+    else if(c==='"')q=true;else if(c===d){row.push(cell);cell="";}
+    else if(c==="\n"||c==="\r"){if(c==="\r"&&text[i+1]==="\n")i++;row.push(cell);rows.push(row);row=[];cell="";}
+    else cell+=c;}
+  if(cell||row.length){row.push(cell);rows.push(row);}
+  return rows.filter(function(r){return r.some(function(x){return x.trim();});});
+}
+var MON={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+function parseWhen(v){v=String(v||"").trim();
+  var m=/^(\d{1,2}) (\w{3})\w* (\d{4}),? (\d{1,2}):(\d{2})/.exec(v);
+  if(m&&MON[m[2].toLowerCase()]!=null)return new Date(+m[3],MON[m[2].toLowerCase()],+m[1],+m[4],+m[5]).getTime();
+  m=/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/.exec(v);
+  if(m)return new Date(+m[1],+m[2]-1,+m[3],+(m[4]||12),+(m[5]||0)).getTime();
+  var t=Date.parse(v);return isNaN(t)?0:t;}
+function dsOf(t){var d=new Date(t);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function guessMuscle(n){var R=[[/calf/i,"calves"],[/wrist|forearm/i,"forearms"],[/shrug/i,"traps"],[/rear delt|lateral|front raise|shoulder press|overhead press|military|arnold|face pull/i,"shoulders"],
+  [/skull|tricep|pushdown|kickback|dip/i,"triceps"],[/leg curl|rdl|romanian|stiff|nordic|good morning/i,"hamstrings"],[/curl/i,"biceps"],
+  [/\brows?\b|pull-?ups?|chin-?ups?|pulldown|pullover/i,"lats"],[/crunch|plank|sit-?up|leg raise|knee raise|ab /i,"abdominals"],
+  [/hip thrust|glute|bridge/i,"glutes"],[/squat|lunge|leg press|leg extension|split|step.?up/i,"quadriceps"],[/deadlift|back extension|hyper/i,"lower back"],
+  [/bench|press|fly|push-?ups?|chest/i,"chest"]];for(var i=0;i<R.length;i++)if(R[i][0].test(n))return R[i][1];return "other";}
+var CARDIO_RE=[[/run|jog|treadmill/i,"run"],[/walk/i,"walk"],[/cycl|bike|ride|spin/i,"ride"],[/row(ing)? machine|rowing|erg/i,"row"],[/stair|step mill/i,"stairs"],[/elliptical/i,"elliptical"],[/swim/i,"swim"],[/hike/i,"hike"]];
+function importPlan(text,unit){
+  var rows=parseCSV(text);if(rows.length<2)return{err:"That file has no rows."};
+  var H=rows[0].map(function(x){return x.trim().toLowerCase().replace(/^﻿/,"");}),col=function(){for(var i=0;i<arguments.length;i++){var j=H.indexOf(arguments[i]);if(j>=0)return j;}return -1;};
+  var hevy=col("exercise_title")>=0,strong=col("exercise name")>=0;if(!hevy&&!strong)return{err:"That doesn’t look like a Hevy or Strong export."};
+  var C=hevy?{title:col("title"),start:col("start_time"),end:col("end_time"),ex:col("exercise_title"),type:col("set_type"),lb:col("weight_lbs"),kg:col("weight_kg"),reps:col("reps"),rpe:col("rpe"),sec:col("duration_seconds"),mi:col("distance_miles"),km:col("distance_km"),note:col("description")}
+    :{title:col("workout name"),start:col("date"),dur:col("duration"),ex:col("exercise name"),type:col("set order"),w:col("weight"),unit:col("weight unit"),reps:col("reps"),rpe:col("rpe"),sec:col("seconds"),dist:col("distance"),note:col("workout notes")};
+  var get=function(r,i){return i>=0?String(r[i]==null?"":r[i]).trim():"";},num=function(v){return +String(v).replace(",",".")||0;};
+  var wk={},order=[];
+  rows.slice(1).forEach(function(r){var t0=parseWhen(get(r,C.start));if(!t0)return;var title=get(r,C.title)||"Workout",key=t0+"|"+title;
+    if(!wk[key]){wk[key]={t0:t0,title:title,end:hevy?parseWhen(get(r,C.end)):0,dur:get(r,C.dur),note:get(r,C.note),ex:{},exOrder:[],cardio:null};order.push(key);}
+    var W=wk[key],name=get(r,C.ex);if(!name)return;
+    var reps=Math.round(num(get(r,C.reps))),lb=hevy?(C.lb>=0?num(get(r,C.lb)):num(get(r,C.kg))*2.20462):num(get(r,C.w))*((C.unit>=0?get(r,C.unit).toLowerCase():unit)==="kg"?2.20462:1);
+    var sec=num(get(r,C.sec)),dist=hevy?(C.mi>=0?num(get(r,C.mi)):num(get(r,C.km))*0.621371):num(get(r,C.dist));
+    if(!reps&&!lb&&sec>0){var ct="other";CARDIO_RE.forEach(function(c){if(ct==="other"&&c[0].test(name))ct=c[1];});
+      W.cardio=W.cardio||{type:ct,min:0,mi:0};W.cardio.min+=Math.round(sec/60);W.cardio.mi+=dist;return;}
+    if(!W.ex[name]){W.ex[name]={n:name,m:guessMuscle(name),sets:[]};W.exOrder.push(name);}
+    var typ=get(r,C.type).toLowerCase(),x={reps:reps,lb:Math.round(lb*2)/2,done:true};
+    if(typ==="warmup"||typ==="w")x.k="W";else if(typ==="dropset"||typ==="d")x.k="Drop";else if(typ==="failure"||typ==="f")x.k="F";
+    var rpe=num(get(r,C.rpe));if(rpe>=5&&rpe<=10)x.rpe=rpe;
+    W.ex[name].sets.push(x);});
+  var have={};Object.keys(DB.gym.logs).forEach(function(k){if(DB.gym.logs[k].imp)have[DB.gym.logs[k].imp]=1;});
+  var out=[],skip=0,sets=0;
+  order.forEach(function(key){var W=wk[key],sig=(hevy?"hevy:":"strong:")+key;if(have[sig]){skip++;return;}
+    var min=W.end>W.t0?Math.round((W.end-W.t0)/60000):(function(d){var h=/(\d+)\s*h/.exec(d),m=/(\d+)\s*m/.exec(d);return (h?+h[1]*60:0)+(m?+m[1]:0)||(+d>0?Math.round(+d/60):0);})(W.dur)||60;
+    var ex=W.exOrder.map(function(n){sets+=W.ex[n].sets.length;return W.ex[n];});
+    if(ex.length)out.push({ds:dsOf(W.t0),log:{rid:null,name:W.title,ex:ex,t0:W.t0,t1:W.t0+min*60000,imp:sig,feel:W.note?{note:W.note.slice(0,500)}:undefined}});
+    else if(W.cardio){var c=W.cardio,cm=c.min||min;out.push({ds:dsOf(W.t0),log:{rid:null,name:CARDIO[c.type][0]+" · "+cm+" min",ex:[],t0:W.t0,t1:W.t0+cm*60000,imp:sig,
+      cardio:{type:c.type,min:cm,mi:Math.round(c.mi*100)/100,hr:0,eff:2,note:"",cal:cardioCal(c.type,cm,2)}}});}});
+  return{src:hevy?"Hevy":"Strong",items:out,skip:skip,sets:sets,unitAsk:strong&&C.unit<0};
+}
+function csvImpBody(){
+  var sh=V.sheet,pl=importPlan(sh.text,sh.unit||"lb"),h='';
+  if(pl.err)return '<div class="warn" style="margin-top:0">'+esc(pl.err)+'</div><div class="fnote">In Hevy: Settings → Export & Import Data → Export Workouts. In Strong: Settings → Export Strong Data.</div>';
+  var ds=pl.items.map(function(x){return x.ds;}).sort();
+  h+='<div class="h1" style="font-size:22px">'+pl.items.length+' workout'+(pl.items.length===1?'':'s')+' from '+pl.src+'</div>';
+  if(ds.length)h+='<div class="ls" style="margin-top:6px">'+esc(dayLabel(ds[0]))+' to '+esc(dayLabel(ds[ds.length-1]))+' · '+pl.sets+' sets</div>';
+  if(pl.skip)h+='<div class="fnote">'+pl.skip+' already in Fuel, skipped.</div>';
+  if(pl.unitAsk)h+='<div class="flabel">Weights in this file are in</div>'+chipRow("csvunit",sh.unit||"lb",[["lb","Pounds"],["kg","Kilograms"]]);
+  h+='<div class="fnote">They join your history, records and stats. One undo takes them all back out.</div>';
+  h+='<div class="sfoot">'+(pl.items.length?'<button class="bigbtn" data-act="csvgo">'+IC("download")+'Import '+pl.items.length+' workout'+(pl.items.length===1?'':'s')+'</button>':'<div class="okline">Nothing new to import.</div>')+'</div>';
   return h;
 }
 /* ---------------- training stats ----------------
@@ -1589,6 +1776,9 @@ function statsBody(){
   h+='<div class="sumtiles">'+sumTile("Workouts",cur.n,prv&&prv.n,cur.n)+sumTile("Time",fmtMet("min",cur.min),prv&&prv.min,cur.min)+
      sumTile("Volume",fmtVol(cur.vol),prv&&prv.vol,cur.vol)+sumTile("Sets",cur.sets,prv&&prv.sets,cur.sets)+'</div>';
   if(prv)h+='<div class="fnote">Percentages compare with the '+len+' days before.</div>';
+  var cd={n:0,min:0,mi:0,cal:0};keys.forEach(function(k){var L=DB.gym.logs[k],d=logDate(k);if(!L.cardio||d<a||d>t)return;cd.n++;cd.min+=L.cardio.min;cd.mi+=L.cardio.mi||0;cd.cal+=L.cardio.cal||0;});
+  if(cd.n)h+='<div class="card"><div class="mealhd"><span class="mt">Cardio</span><span class="mcal num">'+cd.n+' session'+(cd.n===1?'':'s')+'</span></div>'+
+     '<div class="sumtiles" style="grid-template-columns:repeat(3,1fr)">'+sumTile("Time",fmtMet("min",cd.min))+sumTile("Distance",(Math.round(cd.mi*10)/10)+" mi")+sumTile("Calories","about "+fmtVol(cd.cal))+'</div></div>';
   /* bars: weeks for short ranges, months for long ones */
   var monthly=len>120,vals=[],labels=[],idx={};
   if(monthly){var d0=a.slice(0,7)+"-01";for(var ms=d0;ms<=t;){idx[ms.slice(0,7)]=vals.length;vals.push(0);labels.push(fmtDate(ms).md.split(" ")[0]);
@@ -1609,13 +1799,12 @@ function statsBody(){
   h+='<div class="card"><div class="mealhd"><span class="mt">Consistency</span><span class="mcal num">'+streak+' week'+(streak===1?'':'s')+' in a row</span></div>'+cal+
      '<div class="fnote">The last 12 weeks, Monday to Sunday. The streak counts weeks with at least one workout.</div></div>';
   /* sets per muscle, last 7 days, against 10-20 */
-  var mus={};for(var di=0;di<7;di++)logsOn(dateAdd(t,-di)).forEach(function(k){var L=DB.gym.logs[k];if(!L.t1)return;
-    (L.ex||[]).forEach(function(ex){var n=workSets(ex);if(n&&ex.m&&ex.m!=="other")mus[ex.m]=(mus[ex.m]||0)+n;});});
+  var mus={},vt=volTarget();for(var di=0;di<7;di++)logsOn(dateAdd(t,-di)).forEach(function(k){var L=DB.gym.logs[k];if(L.t1)muscleSets(L,mus);});
   var mk=Object.keys(mus).sort(function(x,y){return mus[y]-mus[x];});
-  if(mk.length){h+='<div class="card"><div class="mealhd"><span class="mt">Sets per muscle, last 7 days</span><span class="mcal">aim for 10-20</span></div><div class="musl">';
-    mk.forEach(function(mn){var v=mus[mn],st=v<10?"lo":v>20?"hi":"ok";
-      h+='<div class="musr"><span class="mn">'+esc(mn)+'</span><span class="mbar"><i class="band"></i><i class="fill '+st+'" style="width:'+Math.min(100,v/25*100).toFixed(1)+'%"></i></span><b class="num">'+v+'</b></div>';});
-    h+='</div><div class="fnote">Working sets for each exercise’s main muscle; a drop set or rest-pause round counts once. Most people grow best somewhere in the shaded 10-20.</div></div>';}
+  if(mk.length){h+='<div class="card"><div class="mealhd"><span class="mt">Sets per muscle, last 7 days</span><span class="mcal num">aim for '+vt.lo+'-'+vt.hi+'</span></div><div class="musl">';
+    mk.forEach(function(mn){var v=mus[mn],st=v<vt.lo?"lo":v>vt.hi?"hi":"ok";
+      h+='<div class="musr"><span class="mn">'+esc(mn)+'</span><span class="mbar"><i class="band" style="left:'+(vt.lo/25*100)+'%;width:'+((vt.hi-vt.lo)/25*100)+'%"></i><i class="fill '+st+'" style="width:'+Math.min(100,v/25*100).toFixed(1)+'%"></i></span><b class="num">'+fmtSets(v)+'</b></div>';});
+    h+='</div><div class="fnote">The main muscle counts a full set, the muscles that help count half (a press also works triceps). A drop set or rest-pause round counts once. The shaded range is '+vt.lo+'-'+vt.hi+' sets a week'+(vt.why?' '+vt.why:'')+'.</div></div>';}
   /* records and exercises */
   var ex={};keys.forEach(function(k){var seen={};(DB.gym.logs[k].ex||[]).forEach(function(e){if(seen[e.n])return;seen[e.n]=1;if(exMetrics(DB.gym.logs[k],e.n).sets)ex[e.n]=(ex[e.n]||0)+1;});});
   var prs=DB.gym.prs||{},pk=Object.keys(prs).filter(function(n){return prs[n].lb>0;}).sort(function(x,y){return e1rm(prs[y].lb,prs[y].reps)-e1rm(prs[x].lb,prs[x].reps);});
@@ -1677,6 +1866,7 @@ function setRowsHtml(ex,ei,ro){
   ex.sets.forEach(function(s){if(s.g>rounds)rounds=s.g;if(s.g===1)perRound++;});
   var many=grouped&&perRound>1,cls=many?' lb2':'';
   var h='',hd='<div class="rowhd'+(ro?' ro':'')+cls+'"><span></span><span>'+(ro?"Target":"Reps")+'</span><span>'+(ro?"Last time":"lb")+'</span>'+(ro?'':'<span></span>')+'</div>';
+  var prev=ro?null:prevExSets(ex.n,V.sheet.ds);
   ex.sets.forEach(function(s,si){
     var lab=grouped?(s.k||String(s.g)):String(si+1);
     if(many&&rounds>1&&s.p===0)h+='<div class="rndhd">Round '+s.g+' of '+rounds+'</div>';
@@ -1693,7 +1883,7 @@ function setRowsHtml(ex,ei,ro){
        '<button class="msbtn" data-act="gymrepinc"'+at+' aria-label="More reps">'+IC("plus")+'</button></span>'+
        '<span class="stp"><button class="msbtn" data-act="gymlbdec"'+at+' aria-label="Less weight">'+IC("minus")+'</button>'+
        '<input class="setin num" inputmode="decimal" autocomplete="off" data-f="lb"'+at+' value="'+(s.lb>0?s.lb:"")+'" placeholder="BW" aria-label="Weight in pounds, set '+esc(lab)+'">'+
-       '<button class="msbtn" data-act="gymlbinc"'+at+' aria-label="More weight">'+IC("plus")+'</button></span>'+ck+'</div>';
+       '<button class="msbtn" data-act="gymlbinc"'+at+' aria-label="More weight">'+IC("plus")+'</button></span>'+ck+'</div>'+rowSub(ei,s,si,prev);
   });
   if(ro)return h;
   return h+'<div class="row" style="gap:8px;margin-top:8px">'+(many?
@@ -1701,6 +1891,21 @@ function setRowsHtml(ex,ei,ro){
      (rounds>1?'<button class="textbtn" data-act="gymdelround" data-ei="'+ei+'">'+IC("minus")+'Remove round</button>':''):
      '<button class="textbtn" data-act="gymaddset" data-ei="'+ei+'">'+IC("plus")+'Add set</button>'+
      (ex.sets.length>1?'<button class="textbtn" data-act="gymdelset" data-ei="'+ei+'">'+IC("minus")+'Remove set</button>':''))+'</div>';
+}
+/* under a ticked row: how hard it was (asked right after ticking) and how it compares with last time */
+var RPES=[6,7,7.5,8,8.5,9,9.5,10];
+function rowSub(ei,s,si,prev){
+  var sh=V.sheet;
+  if(sh.rpeFor&&sh.rpeFor.ei===ei&&sh.rpeFor.si===si&&s.done)
+    return '<div class="rpestrip"><div class="rq"><b>How hard was that?</b> 10 = nothing left, 9 = 1 more rep, 8 = 2 more</div><div class="rpeb">'+
+      RPES.map(function(v){return '<button class="num'+(s.rpe===v?" on":"")+'" data-act="rpe" data-ei="'+ei+'" data-si="'+si+'" data-v="'+v+'">'+v+'</button>';}).join("")+
+      '</div><div class="row" style="justify-content:space-between"><button class="textbtn" data-act="rpeskip">Skip</button><button class="textbtn" data-act="rpeoff">Stop asking</button></div></div>';
+  if(!s.done||s.t)return '';
+  var p=prev&&(s.g!=null?lastRow(prev,s.g,s.p,si):prev[si]),cmp='';
+  if(p&&p.done&&!p.t){var a=e1rm(s.lb,s.reps)||s.reps,b=e1rm(p.lb,p.reps)||p.reps,up=a>b+0.5,dn=a<b-0.5;
+    cmp='<span class="vs'+(up?" up":dn?" dn":"")+'">'+(up?IC("arrowu"):dn?IC("arrowd"):'<b>=</b>')+'last time '+setTxt(p)+'</span>';}
+  if(!cmp&&!s.rpe)return '';
+  return '<div class="rowsub">'+cmp+(s.rpe?'<span class="rpev num">RPE '+s.rpe+'</span>':'')+'</div>';
 }
 /* A change flows forward only: later sets that still match the old value follow it; a ticked set, or
    one already set to something else, stops it. In a drop set only the same row of later rounds follows
@@ -1761,7 +1966,10 @@ function plMain(log,ro){
   var ex=log.ex[sh.i];
   if(!ex)return '<div class="empty">'+(log.off?"Done outside the app, so there are no sets to show.":"No exercises in this workout yet.")+'</div>'+
     (ro||log.off?'':'<button class="bigbtn ghost" data-act="gymaddex">'+IC("plus")+'Add exercise</button>');
-  var vids=exVideos(ex),meta=exMeta(ex);
+  var vids=exVideos(ex),meta=exMeta(ex),anyDone=log.ex.some(function(e){return e.sets.some(function(x){return x.done;});});
+  if(!ro&&!log.t1&&(log.lighter||!anyDone)&&log.ex.some(function(e){return e.sets.some(function(x){return x.lb>0||x.lb0;});}))
+    h+='<div class="lighter">'+(log.lighter?'<span>Weights are 10% lighter today.</span><button class="textbtn" data-act="lighter">Put them back</button>':
+      '<span>Rough day? Tired, sore, short on sleep?</span><button class="textbtn" data-act="lighter">Go 10% lighter</button>')+'</div>';
   if(vids.length>1)h+='<div class="plmv">'+vids.map(function(x,k){return '<button class="chip'+(k===(sh.vi||0)?" on":"")+'" data-act="plvid" data-vi="'+k+'">'+esc(x.n)+'</button>';}).join("")+'</div>';
   h+='<div class="exhd" style="margin-top:16px"><div class="grow"><div class="plname">'+esc(ex.n)+'</div>'+
      (meta?'<div class="extarget">'+esc(meta)+'</div>':'')+(ex.notes?'<div class="exnote">'+esc(ex.notes)+'</div>':'')+'</div>'+
@@ -1783,7 +1991,8 @@ function plMenu(log,ro){
     if(on&&!dn)h+=b("prevdone","I did this today, outside the app","checkc","",' data-d="0"')+b("prevdone","I did this yesterday, outside the app","checkc","",' data-d="-1"');
     if(dn)h+=b("prevundone","Mark as not done (done "+dayLabel(dn)+")","redo","");
     h+=b("prevsched","Put it on the calendar","plans","");
-  }else if(!log.t1)h+=b("gymfinish","Finish workout now","flag","")+b("gymdel","Discard this workout","trash","danger");
+  }else if(!log.t1)h+=b("gymfinish","Finish workout now","flag","")+(DB.profile.noRPE?b("rpeon","Ask how hard each set was","timer",""):b("rpeoff","Stop asking how hard each set was","timer",""))+
+    b("gymdel","Discard this workout","trash","danger");
   else h+=b("gymreopen","Edit sets","pencil","")+b("gymdel","Delete this workout","trash","danger");
   return h+b("plmenu","Cancel","x","ghost")+'</div>';
 }
@@ -1838,6 +2047,7 @@ function paintPlayer(){
   else{PL.dirty=false;document.getElementById("plmain").innerHTML=plMain(log,ro);}
   document.getElementById("plft").innerHTML=plFoot(log,ro);
 }
+setInterval(function(){var c=document.getElementById("cdclock"),cl=DB&&DB.gym&&DB.gym.cardioLive;if(c&&cl)c.textContent=fmtClock(Date.now()-cl.t0);},1000);
 document.addEventListener("focusin",function(ev){var t=ev.target;if(t&&t.classList&&t.classList.contains("setin"))setTimeout(function(){try{t.select();}catch(e){}},0);});
 document.addEventListener("focusout",function(ev){var t=ev.target;if(t&&t.classList&&t.classList.contains("setin"))
   setTimeout(function(){if(PL.dirty&&!typingIn(document.getElementById("player")))paintPlayer();},0);});
@@ -2098,12 +2308,15 @@ function renderGym(){
        '<div class="row" style="justify-content:center;gap:18px;margin-top:6px"><button class="textbtn" data-act="gymfinish" data-k="'+openK+'">'+IC("flag")+'Finish now</button>'+
        '<button class="textbtn danger" data-act="gymdel" data-k="'+openK+'">'+IC("trash")+'Discard</button></div></div>';
   }
+  /* a cardio timer running */
+  var cl=g.cardioLive;
+  if(cl)h+='<div class="card hero"><div class="eyebrow">'+esc((CARDIO[cl.type]||CARDIO.other)[0])+' · running</div><div class="h1 hero-t num" id="cdclock">'+fmtClock(Date.now()-cl.t0)+'</div>'+
+     '<button class="bigbtn" data-act="cdstop">'+IC("flag")+'Stop and save</button><div style="text-align:center"><button class="textbtn danger" data-act="cdcancel">Cancel</button></div></div>';
   /* 2. what's already done today (you can do more than one) */
   if(doneT.length){
     h+='<div class="card"><div class="mealhd"><span class="mt" style="display:flex;align-items:center;gap:6px;color:var(--green2)">'+IC("checkcf")+'Done today</span></div><div class="wklist">';
     doneT.forEach(function(k){var L=g.logs[k],v=gymVol(L);
-      h+='<button class="wkrow" data-act="gymopen" data-k="'+k+'"><span class="grow"><span class="ln">'+esc(L.name)+'</span><br><span class="ls num">'+
-        (L.off?"Done outside the app":v.sets+' sets · '+fmtVol(v.vol)+' lb · '+Math.max(1,Math.round((L.t1-L.t0)/60000))+' min')+'</span></span>'+IC("caretr")+'</button>';});
+      h+='<button class="wkrow" data-act="gymopen" data-k="'+k+'"><span class="grow"><span class="ln">'+esc(L.name)+'</span><br><span class="ls num">'+esc(logLine(L))+'</span></span>'+IC("caretr")+'</button>';});
     h+='</div></div>';
   }
   /* 3. what's next: start it, or look first */
@@ -2131,6 +2344,11 @@ function renderGym(){
          '<button class="bigbtn ghost" data-act="gymstart" data-d="'+today+'" data-src="routine">Log a workout anyway</button></div>';
     }
   }
+  /* quick start: an empty workout, or cardio */
+  h+='<div class="card qstart"><div class="eyebrow">Quick start</div><div class="chips">'+
+     (openK?'':'<button class="chip" data-act="gymstart" data-d="'+today+'" data-src="empty">'+IC("plus")+'Empty workout</button>')+
+     ['run','walk','ride','row'].map(function(t){return '<button class="chip" data-act="cardio" data-v="'+t+'">'+CARDIO[t][0]+'</button>';}).join("")+
+     '<button class="chip" data-act="cardio" data-v="other">More cardio</button></div></div>';
   /* 4. the program's week: tap any day to see it, then start it. Order is up to you. */
   if(ps&&!ps.complete){
     var vw=ps.up.w,vwk=ps.p.weeks[vw],vdone=0,tot=0,all=0;
@@ -2159,7 +2377,7 @@ function renderGym(){
     h+='<div class="card"><div class="mealhd"><span class="mt">Recent workouts</span></div><div class="wklist">';
     recent.forEach(function(k){var L=g.logs[k],v=gymVol(L);
       h+='<button class="wkrow" data-act="gymopen" data-k="'+k+'"><span class="grow"><span class="ln">'+esc(L.name)+'</span><br><span class="ls num">'+dayLabel(logDate(k))+' · '+
-        (L.off?"done outside the app":!L.t1?"not finished":v.sets+' sets · '+fmtVol(v.vol)+' lb')+'</span></span>'+IC("caretr")+'</button>';});
+        esc(logLine(L))+'</span></span>'+IC("caretr")+'</button>';});
     h+='</div></div>';
   }
   /* scheduled sessions ahead */
@@ -2181,16 +2399,12 @@ function renderGym(){
     h+='<div class="wk'+(wi===wd?" cur":"")+(done?" done":"")+'"><span>'+WDL[wi]+'</span><i>'+(done?IC("check"):(planFor(ds2)&&!dks.length?IC("gym"):(rr?esc(rr.name.charAt(0).toUpperCase()):"")))+'</i></div>';
   }
   h+='</div></div>';
-  /* muscles trained, last 7 days */
-  var mus={};
-  for(var mi=0;mi<7;mi++)logsOn(dateAdd(today,-mi)).forEach(function(k){
-    (g.logs[k].ex||[]).forEach(function(ex){var n=workSets(ex);if(n)mus[ex.m]=(mus[ex.m]||0)+n;});});
-  var mk=Object.keys(mus).sort(function(a,b){return mus[b]-mus[a];});
-  if(mk.length){
-    h+='<div class="card"><div class="eyebrow">Muscles · sets in the last 7 days</div><div class="chips" style="margin-top:9px">'+
-       mk.map(function(m){return '<span class="chip'+(mus[m]>=10?" grn":"")+'">'+esc(m)+' · '+mus[m]+'</span>';}).join("")+'</div>'+
-       '<div class="fnote">Quiet muscles here are the ones going untrained.</div></div>';
-  }
+  /* recovery: what's ready to train again, still recovering, or not trained lately */
+  if(finishedKeys().length){var rc=recovery(),rcRow=function(lab,list,cls){return list.length?'<div class="rcrow"><span class="rcl">'+lab+'</span><span class="chips" style="margin-top:0">'+
+      list.map(function(m){return '<span class="chip '+cls+'">'+esc(m)+'</span>';}).join("")+'</span></div>':'';};
+    h+='<div class="card"><div class="mealhd"><span class="mt">Recovery</span><button class="textbtn" style="padding:0" data-act="gymstats">Stats'+IC("caretr")+'</button></div>'+
+      rcRow("Worked hard",rc.hard,"rch")+rcRow("Recovering",rc.recovering,"rcm")+rcRow("Ready",rc.ready,"grn")+rcRow("Not lately",rc.idle,"")+
+      '<div class="fnote">From your last two weeks of sets: each one fades by half every day and a half (two days for legs).</div></div>';}
   /* routines */
   h+='<div class="reshd">Routines</div>';
   if(!g.routines.length)h+='<div class="card"><div class="empty">No routines yet. Build one (Push, Pull, Legs), pick exercises from the 876-exercise library, and assign weekdays.</div></div>';
@@ -2398,6 +2612,11 @@ function renderSettings(){
    '<button class="bigbtn ghost" data-act="signout">Sign out</button></div>';
   h+='<button class="card instbar" data-act="install">'+IC("phone")+'<span class="grow"><b>'+(isStandalone()?"Offline and videos":"Put Fuel on your iPhone")+'</b><br>'+
      '<span class="ls">'+(isStandalone()?"What works with no connection":"Install it, use it with no Wi-Fi")+'</span></span>'+IC("caretr")+'</button>';
+  h+='<div class="card"><div class="eyebrow">Workouts in and out</div>'+
+   '<button class="bigbtn ghost" data-act="csvexport" style="margin-top:10px">'+IC("download")+'Export workouts (CSV, one row per set)</button>'+
+   '<label class="bigbtn ghost" for="csvin" style="display:flex">'+IC("arrowu")+'Import from Hevy or Strong (CSV)</label>'+
+   '<input id="csvin" type="file" accept=".csv,text/csv" style="display:none">'+
+   '<div class="fnote">Hevy: Settings → Export & Import Data → Export Workouts. Strong: Settings → Export Strong Data.</div></div>';
   h+='<div class="card"><div class="eyebrow">Your data</div>'+
    '<button class="bigbtn ghost" data-act="exportdata" style="margin-top:10px">Export data (copy JSON)</button>'+
    '<div class="flabel">Import (paste JSON, then tap Import)</div><textarea id="impbox" placeholder="Paste an export here"></textarea>'+
@@ -2739,7 +2958,7 @@ function sheetBody(){
     k==="logrecipe"?logRecipeBody():k==="applyplan"?applyPlanBody():k==="cal"?calBody():
     k==="copy"?copyBody():k==="planview"?planViewBody():k==="planbuild"?planBuildBody():
     k==="pbpick"?pbPickBody():k==="clearplan"?clearPlanBody():
-    k==="progopts"?progOptsBody():k==="install"?installBody():k==="gymstats"?statsBody():k==="gymex"?exStatBody():k==="gympick"?gymPickBody():k==="gymroutine"?gymRoutineBody():
+    k==="progopts"?progOptsBody():k==="install"?installBody():k==="gymstats"?statsBody():k==="gymex"?exStatBody():k==="cardio"?cardioBody():k==="csvimp"?csvImpBody():k==="gympick"?gymPickBody():k==="gymroutine"?gymRoutineBody():
     k==="gymimport"?gymImportBody():k==="progview"?progViewBody():k==="progsched"?progSchedBody():"";
 }
 
@@ -2756,7 +2975,7 @@ function render(){
     var am=document.getElementById("authmail");if(am&&AUTH.err)am.focus();return;}
   var h=V.tab==="diary"?renderDiary():V.tab==="gym"?renderGym():V.tab==="plans"?renderPlans():V.tab==="recipes"?renderRecipes():V.tab==="progress"?renderProgress():renderSettings();
   if(V.sheet&&V.sheet.kind!=="gymlog"&&V.sheet.kind!=="gymprev"){
-    var titles={progopts:"Program",install:"Use Fuel offline",gymstats:"Training stats",gymex:(V.sheet.n||"Exercise"),add:"Add to "+(V.sheet.target?MEALS[V.sheet.target.meal]||"recipe":""),entry:"Edit food",recipe:(V.sheet.editingId?"Edit recipe":"New recipe"),logrecipe:"Log recipe",applyplan:"Log full plan",cal:"Jump to a date",copy:"Copy a meal",
+    var titles={progopts:"Program",install:"Use Fuel offline",gymstats:"Training stats",gymex:(V.sheet.n||"Exercise"),cardio:(V.sheet.k?"Cardio":V.sheet.live?"Save your session":"Cardio"),csvimp:"Import workouts",add:"Add to "+(V.sheet.target?MEALS[V.sheet.target.meal]||"recipe":""),entry:"Edit food",recipe:(V.sheet.editingId?"Edit recipe":"New recipe"),logrecipe:"Log recipe",applyplan:"Log full plan",cal:"Jump to a date",copy:"Copy a meal",
       planview:(planById(V.sheet.pid)||{}).name||"Plan",planbuild:(V.sheet.editingId?"Edit plan":"Create a meal plan"),pbpick:"Add to Day "+((V.sheet.dayIdx||0)+1),clearplan:"Remove plan foods",
       gymlog:(DB.gym.logs[V.sheet.ds]||{}).name||"Workout",gympick:"Add exercise",gymroutine:(V.sheet.editingId?"Edit routine":"New routine"),
       gymimport:(V.sheet.stage==="reading"?"Importing":"Review program"),progview:(progById(V.sheet.pid)||{}).name||"Program",progsched:(V.sheet.s>=0?"Schedule a day":"Schedule a week")};
@@ -2862,8 +3081,11 @@ document.addEventListener("input",function(ev){
 });
 document.addEventListener("change",function(ev){
   if(ev.target.classList&&ev.target.classList.contains("setin")){setInput(ev.target);return;}
+  if(V.sheet&&V.sheet.kind==="cardio"&&/^cd(min|mi|hr|note)$/.test(ev.target.id)){cardioRead();rerenderSheet();return;}
   if(ev.target.id==="feelnote"&&V.sheet&&DB.gym.logs[V.sheet.ds]){var fn=DB.gym.logs[V.sheet.ds];if(!fn.feel)fn.feel={};fn.feel.note=ev.target.value.slice(0,500);save();return;}
   if(ev.target.id==="pdfin"){var pf=ev.target.files&&ev.target.files[0];ev.target.value="";gymImport(pf);return;}
+  if(ev.target.id==="csvin"){var cf=ev.target.files&&ev.target.files[0];ev.target.value="";
+    if(cf)cf.text().then(function(tx){V.sheet={kind:"csvimp",text:tx,unit:"lb"};render();});return;}
   if(ev.target.id==="progjump"&&DB.gym.active){var pj=+ev.target.value;if(V.sheet&&V.sheet.kind==="progopts")V.sheet=null;
     if(pj!==DB.gym.active.w)progChange("Jumped to Week "+(pj+1),function(){var a=DB.gym.active;a.hist.push({a:"jump",w:a.w,to:pj,at:Date.now()});a.w=pj;});
     return;}
@@ -3123,6 +3345,7 @@ document.addEventListener("click",function(ev){
     gs.done=!gs.done;
     /* a live record: beats every earlier workout, and any record already set today on this exercise */
     delete gs.pr;
+    if(gs.done&&!gs.t&&!DB.profile.noRPE)V.sheet.rpeFor={ei:+el.getAttribute("data-ei"),si:gsi};else if(!gs.done)V.sheet.rpeFor=null;
     if(gs.done&&!gs.t&&gs.reps>0){var ph=exHist(gx.n,V.sheet.ds);
       if(ph.length){var pb=exBest(ph),pe=e1rm(gs.lb,gs.reps),prToday=0;
         gl.ex.forEach(function(x2){if(x2.n===gx.n)x2.sets.forEach(function(y){if(y!==gs&&y.done&&y.pr)prToday=Math.max(prToday,e1rm(y.lb,y.reps)||y.reps);});});
@@ -3162,6 +3385,11 @@ document.addEventListener("click",function(ev){
   else if(act==="feel"){var fl=DB.gym.logs[V.sheet.ds],ff=el.getAttribute("data-f"),fv=+el.getAttribute("data-v");
     if(fl){if(!fl.feel)fl.feel={};fl.feel[ff]=fl.feel[ff]===fv?0:fv;save();paintPlayer();}}
   else if(act==="plmenu"){V.sheet.menu=!V.sheet.menu;paintPlayer();}
+  else if(act==="rpe"){var rl=DB.gym.logs[V.sheet.ds],rs=rl&&rl.ex[+el.getAttribute("data-ei")].sets[+el.getAttribute("data-si")],rv=+el.getAttribute("data-v");
+    if(rs){rs.rpe=rs.rpe===rv?0:rv;if(!rs.rpe)delete rs.rpe;save();}V.sheet.rpeFor=null;paintPlayer();}
+  else if(act==="rpeskip"){V.sheet.rpeFor=null;paintPlayer();}
+  else if(act==="rpeoff"||act==="rpeon"){DB.profile.noRPE=act==="rpeoff";V.sheet.rpeFor=null;V.sheet.menu=false;save();paintPlayer();
+    showUndo(act==="rpeoff"?"Won’t ask how hard each set was. Turn it back on from the ⋯ menu.":"Will ask how hard each set was",null);}
   /* previews: any program session, read-only, with Start */
   else if(act==="prevopen"){var pob=V.sheet&&V.sheet.kind==="progview"?V.sheet:null;PL.prev=null;
     V.sheet={kind:"gymprev",pid:el.getAttribute("data-pid"),w:+el.getAttribute("data-w"),s:+el.getAttribute("data-s"),i:0,back:pob};render();}
@@ -3191,10 +3419,26 @@ document.addEventListener("click",function(ev){
       if(DL.prog&&ga&&ga.pid===DL.prog.pid&&ga.done[DL.prog.w+"|"+DL.prog.s]===logDate(dk))delete ga.done[DL.prog.w+"|"+DL.prog.s];});}
   else if(act==="pllist"){V.sheet.list=!V.sheet.list;paintPlayer();}
   else if(act==="plgo"){var pgi=+el.getAttribute("data-i"),pgl=plLog();
-    if(pgl&&pgi>=0&&pgi<pgl.ex.length){V.sheet.i=pgi;V.sheet.vi=0;V.sheet.list=false;paintPlayer();}}
+    if(pgl&&pgi>=0&&pgi<pgl.ex.length){V.sheet.i=pgi;V.sheet.vi=0;V.sheet.list=false;V.sheet.rpeFor=null;paintPlayer();}}
   else if(act==="plvid"){V.sheet.vi=+el.getAttribute("data-vi")||0;paintPlayer();}
   else if(act==="gymrest30"){if(GT.left>0)GT.left+=30;else gymRest(30);rerenderSheet();}
   else if(act==="progopts"){V.sheet={kind:"progopts"};render();}
+  else if(act==="cardio"){V.sheet={kind:"cardio",type:el.getAttribute("data-v")||"run",eff:2};render();}
+  else if(act==="cdtype"){cardioRead();V.sheet.type=el.getAttribute("data-v");rerenderSheet();}
+  else if(act==="cdeff"){cardioRead();V.sheet.eff=+el.getAttribute("data-v");rerenderSheet();}
+  else if(act==="cdday"){cardioRead();V.sheet.day=+el.getAttribute("data-v");rerenderSheet();}
+  else if(act==="cdsave"){cardioSave();}
+  else if(act==="csvexport"){exportWorkoutsCSV();}
+  else if(act==="csvunit"){V.sheet.unit=el.getAttribute("data-v");rerenderSheet();}
+  else if(act==="csvgo"){var cp=importPlan(V.sheet.text,V.sheet.unit||"lb");V.sheet=null;
+    if(cp.items)gymChange("Imported "+cp.items.length+" workouts from "+cp.src,function(){cp.items.forEach(function(it){DB.gym.logs[newLogKey(it.ds)]=it.log;});});}
+  else if(act==="cdstart"){cardioRead();DB.gym.cardioLive={type:V.sheet.type||"run",t0:Date.now()};save();V.sheet=null;render();}
+  else if(act==="cdstop"){var cl=DB.gym.cardioLive;if(cl)V.sheet={kind:"cardio",live:true,type:cl.type,t0:cl.t0,eff:2,min:Math.max(1,Math.round((Date.now()-cl.t0)/60000))};render();}
+  else if(act==="cdcancel"){if(confirm("Stop the timer without saving?")){delete DB.gym.cardioLive;save();render();}}
+  else if(act==="lighter"){var ll=DB.gym.logs[V.sheet.ds];if(ll){var on=!ll.lighter;
+    ll.ex.forEach(function(ex){ex.sets.forEach(function(x){if(x.done||x.t)return;
+      if(on&&x.lb>0){x.lb0=x.lb;x.lb=Math.max(0,Math.round(x.lb*0.9/2.5)*2.5);}else if(!on&&x.lb0!=null){x.lb=x.lb0;delete x.lb0;}});});
+    ll.lighter=on;save();paintPlayer();}}
   else if(act==="gymstats"){V.sheet={kind:"gymstats",r:"3m",m:"vol"};render();}
   else if(act==="strange"){V.sheet.r=el.getAttribute("data-v");rerenderSheet();}
   else if(act==="stmetric"){V.sheet.m=el.getAttribute("data-v");rerenderSheet();}
