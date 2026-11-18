@@ -965,3 +965,22 @@ test("strength by muscle: best estimated max on the main lift, change on the sam
   assert.match(f.strengthCard(), /1\.27× body weight/);
   assert.ok(html.includes("muscleBarsCard()+strengthCard()"));
 });
+
+test("location: one reading matched to the nearest saved place within 150 m, offline", () => {
+  const f = fnFrom("/* ---------------- where you train, by location", "function placeName(", "{geoDist,geoNearest,geoPing,GEO}",
+    ["locs", "save", "showUndo", "DB"], [() => [], () => {}, () => {}, { gym: {} }]);
+  const home = { id: "h", name: "Home", geo: { lat: 40.7128, lon: -74.006, acc: 10 } }, gym = { id: "g", name: "Gym", geo: { lat: 40.7228, lon: -74.006, acc: 10 } };
+  assert.ok(Math.abs(f.geoDist(home.geo, gym.geo) - 1112) < 5, "0.01° of latitude is about 1.1 km");
+  assert.equal(f.geoNearest({ lat: 40.7135, lon: -74.006, acc: 15 }, [home, gym]).l.id, "h", "80 m from home");
+  assert.equal(f.geoNearest({ lat: 40.7150, lon: -74.006, acc: 15 }, [home, gym]), null, "250 m away is somewhere else");
+  assert.equal(f.geoNearest({ lat: 40.7150, lon: -74.006, acc: 300 }, [home, gym]).l.id, "h", "a rough reading widens the circle");
+  assert.equal(f.geoNearest({ lat: 40.7135, lon: -74.006, acc: 15 }, [{ id: "x", name: "No spot" }]), null, "places without a spot never match");
+  /* a reading from the last 5 minutes is reused: one ping, not tracking */
+  f.GEO.last = { lat: 1, lon: 2, acc: 5, t: Date.now() };
+  let got = null; f.geoPing(p => { got = p; });
+  assert.deepEqual(got, f.GEO.last);
+  assert.ok(html.includes("getCurrentPosition") && !html.includes("watchPosition"), "a single reading, never watching");
+  for (const a of ["geotog", "geohere", "geoforget", "geoset", "geonew", "geoskip"]) assert.ok(html.includes(`act==="${a}"`), `missing ${a}`);
+  assert.ok(html.includes("gymOpenKey(key);geoTag(key);}") && html.includes("save();PL.prev=null;gymOpenKey(key);geoTag(key);}"), "every new workout checks once");
+  assert.ok(html.includes("if(!ro&&!log.t1)h+=geoAskHtml(log,sh.ds);") && html.includes('(pl?" · "+pl:"")'), "asks in the workout; history shows the place");
+});

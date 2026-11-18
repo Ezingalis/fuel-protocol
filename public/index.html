@@ -289,6 +289,7 @@ select{appearance:none;-webkit-appearance:none;padding-right:34px;
 .mfuel{margin:4px 16px 16px;padding:10px 12px;border-radius:var(--r-sm);background:var(--greenSoft);color:var(--green2);font-size:13.5px;line-height:1.45}
 .mlink{padding:4px 0 0;font-size:13px}.mlink .ic{width:15px;height:15px}
 .strch{font-size:12.5px;font-weight:650;margin-right:8px;color:var(--sub)}.strch.up{color:var(--green2)}.strch.dn{color:var(--amber)}
+.geocard{margin-top:12px}.geocard .chips{margin-top:10px}.geowait{display:flex;align-items:center;gap:6px;margin-top:10px}.geowait .ic{width:15px;height:15px}
 .genchips{gap:6px}.genchips .chip{padding:8px 11px}
 .genrow{display:flex;align-items:center;gap:10px;padding:8px 0}
 .genname{text-align:left;min-width:0;padding:0;background:none;color:inherit}
@@ -1709,6 +1710,9 @@ function equipBody(){
   h+='<div class="flabel">Where you train</div><div class="chips">'+L.map(function(l){return '<button class="chip'+(l.id===loc.id?" on":"")+'" data-act="locpick" data-v="'+l.id+'">'+esc(l.name)+'</button>';}).join("")+
     '<button class="chip" data-act="locadd">'+IC("plus")+'Add a place</button></div>';
   h+='<div class="kv" style="margin-top:8px"><span class="ls">'+(loc.eq.length?loc.eq.length+' kinds of equipment':'Bodyweight only')+'</span><button class="textbtn" data-act="locedit">Edit '+esc(loc.name)+'</button></div>';
+  var gN=L.filter(function(l){return l.geo;}).length;
+  h+='<div class="kv remrow"><span class="grow">Find the place by location<br><span class="ls">'+(DB.gym.geo?(gN?'One reading when a workout starts, matched on your phone':'On. Save a place’s spot from Edit, or answer the question in your next workout'):
+    'One reading when a workout starts, matched on your phone. Off')+'</span></span>'+remSwitch(!!DB.gym.geo,"geotog","","Find the place by location")+'</div>';
   /* the program's needs, this week */
   var pe=progEx(),need={};
   Object.keys(pe.ex).forEach(function(n){exInfoOf(n,EX_MUS[n]).eq.forEach(function(k){if(k!=="bw"){if(!need[k])need[k]=[];need[k].push(n);}});});
@@ -1735,12 +1739,63 @@ function equipBody(){
     return '<div class="kv"><span>'+esc(o)+'<br><span class="ls">now '+esc(subs[o])+'</span></span><button class="textbtn" data-act="subdel" data-n="'+esc(o)+'">Undo</button></div>';}).join(""):
     '<div class="ls" style="margin-top:6px">None yet. In a workout, tap Swap on an exercise and turn on “Swap it every time”.</div>')+'</div>';
   return h;}
+/* ---------------- where you train, by location ----------------
+   One location reading when a workout starts (if turned on), never tracking. It's matched against your saved
+   places by plain distance on the phone, so no map service is used and it works offline. The nearest place
+   within about 150 m becomes current (swaps and Build a workout use its equipment) and the workout records it.
+   Not near any: the workout asks which place it is, and a place learns its spot the first time you say. */
+var GEO_NEAR=150,GEO={last:null,wait:{}};
+function geoDist(a,b){var R=6371000,r=Math.PI/180,dLat=(b.lat-a.lat)*r,dLon=(b.lon-a.lon)*r,
+  h=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dLon/2)*Math.sin(dLon/2);
+  return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));}
+/* the closest saved place, if it's within 150 m (more when either reading was rough) */
+function geoNearest(p,list){var best=null;(list||locs()).forEach(function(l){if(!l.geo)return;var d=geoDist(p,l.geo);if(!best||d<best.d)best={l:l,d:d};});
+  return best&&best.d<=Math.max(GEO_NEAR,Math.min(500,(p.acc||0)+(best.l.geo.acc||0)))?best:null;}
+/* one reading; a reading from the last 5 minutes is reused, so opening Build a workout and then starting it asks once */
+function geoPing(cb){
+  if(GEO.last&&Date.now()-GEO.last.t<300000){cb(GEO.last,null);return;}
+  if(!navigator.geolocation){cb(null,"none");return;}
+  var done=false,fin=function(p,e){if(done)return;done=true;if(p)GEO.last=p;cb(p,e);};
+  setTimeout(function(){fin(null,"timeout");},20000);
+  try{navigator.geolocation.getCurrentPosition(function(pos){var c=pos.coords;
+      fin({lat:Math.round(c.latitude*1e5)/1e5,lon:Math.round(c.longitude*1e5)/1e5,acc:Math.round(c.accuracy||0),t:Date.now()},null);},
+    function(err){fin(null,err&&err.code===1?"denied":"failed");},{enableHighAccuracy:true,timeout:15000,maximumAge:120000});}catch(e){fin(null,"failed");}}
+function geoDenied(){DB.gym.geo=false;save();
+  showUndo("Fuel can’t use your location. Allow it in iPhone Settings › Privacy › Location Services, then turn it back on in Equipment and swaps.",null);}
+function placeName(L){var id=L.geo&&L.geo.id,l=null;if(id)locs().forEach(function(x){if(x.id===id)l=x;});return l?l.name:L.place||"";}
+function placeUse(id){var n=0;Object.keys(DB.gym.logs).forEach(function(k){var L=DB.gym.logs[k];if(L.t1&&L.geo&&L.geo.id===id)n++;});return n;}
+/* make a place current; true if it changed */
+function geoSetPlace(l){if(DB.gym.loc===l.id)return false;DB.gym.loc=l.id;return true;}
+/* when a workout starts: one reading, the place it matches, saved on the workout */
+function geoTag(k){if(!DB.gym.geo||!DB.gym.logs[k])return;GEO.wait[k]=1;
+  geoPing(function(p,err){delete GEO.wait[k];var L=DB.gym.logs[k];if(!L)return;
+    if(!p){if(err==="denied")geoDenied();repaintFor(k);return;}
+    var n=geoNearest(p);L.geo={lat:p.lat,lon:p.lon,acc:p.acc,t:p.t};
+    if(n){L.geo.id=n.l.id;L.place=n.l.name;if(geoSetPlace(n.l))showUndo("At "+n.l.name+": swaps use its equipment",null);}
+    save();repaintFor(k);});}
+function repaintFor(k){if(V.sheet&&V.sheet.kind==="gymlog"&&V.sheet.ds===k)paintPlayer();else render();}
+/* in the workout, when the reading matched no saved place */
+function geoAskHtml(L,k){
+  if(GEO.wait[k])return '<div class="ls geowait">'+IC("gym")+'Checking where you are…</div>';
+  if(!L.geo||L.geo.id||L.geo.skip||L.geo.lat==null)return '';
+  return '<div class="card geocard"><div class="mt">Where are you training?</div><div class="ls">Not near a saved place'+(L.geo.acc?' (reading good to about '+L.geo.acc+' m)':'')+'.</div>'+
+    '<div class="chips">'+locs().map(function(l){return '<button class="chip" data-act="geoset" data-v="'+l.id+'">'+esc(l.name)+'</button>';}).join("")+
+    '<button class="chip" data-act="geonew">'+IC("plus")+'New place here</button></div>'+
+    '<button class="textbtn" data-act="geoskip">Not now</button></div>';}
+function locGeoHtml(loc){
+  var h='<div class="flabel">Where it is</div>';
+  if(loc.geo){var n=placeUse(loc.id);
+    h+='<div class="kv"><span>Spot saved<br><span class="ls num">Good to about '+(loc.geo.acc||0)+' m'+(n?' · '+n+' workout'+(n===1?'':'s')+' here':'')+'</span></span>'+
+      '<button class="textbtn" data-act="geohere">Move it to here</button></div><button class="textbtn danger" data-act="geoforget">Forget the spot</button>';}
+  else h+='<button class="bigbtn ghost" data-act="geohere" style="margin-top:6px">'+IC("gym")+'Save where I am now</button>';
+  return h+'<div class="fnote">One location reading, kept with this place in your Fuel data. When a workout starts, Fuel checks once and picks the place you’re at.</div>';}
 function locEditBody(){
   var loc=curLoc(),h='<div class="flabel">Name</div><input id="locname" value="'+esc(loc.name)+'" maxlength="40">';
   h+='<div class="flabel">Start from</div><div class="chips">'+LOC_PRESETS.map(function(p2,i){return '<button class="chip" data-act="locpreset" data-v="'+i+'">'+p2[0]+'</button>';}).join("")+'</div>';
   h+='<div class="flabel">What it has</div><div class="eqgrid">'+EQUIP.map(function(q){var on=loc.eq.indexOf(q[0])>=0;
     return '<button class="eqi'+(on?" on":"")+'" data-act="loceq" data-v="'+q[0]+'" aria-pressed="'+on+'">'+(on?IC("checkcf"):'<i class="eqo"></i>')+'<span>'+q[1]+'</span></button>';}).join("")+'</div>';
   h+='<div class="fnote">Bodyweight exercises always count. Swaps and the library show what this place has.</div>';
+  h+=locGeoHtml(loc);
   if(locs().length>1)h+='<button class="bigbtn ghost danger" data-act="locdel" style="margin-top:12px">'+IC("trash")+'Remove '+esc(loc.name)+'</button>';
   return h;}
 /* ---------------- build a workout (the Fitbod idea) ----------------
@@ -1876,7 +1931,7 @@ function genStart(sh){
   var key=newLogKey(todayStr()),log={rid:null,name:GEN_SPLITS[sh.k][0]+" workout",gen:sh.k,ex:[],t0:Date.now(),t1:0};
   sh.items.forEach(function(it){var sets=[];for(var i=0;i<it.sets;i++)sets.push({reps:it.reps,lb:it.lb,tr:it.reps,done:false});
     log.ex.push({n:it.n,m:it.m,sets:sets,target:"",rest:it.rest,notes:""});if(DB.gym.bump)delete DB.gym.bump[it.n];});
-  DB.gym.logs[key]=log;PL.prev=null;save();gymOpenKey(key);return key;}
+  DB.gym.logs[key]=log;PL.prev=null;save();gymOpenKey(key);geoTag(key);return key;}
 /* A short ramp before the first big lift for a muscle: about half, then 70%, then 85% of the working weight.
    Shown above the sets, not logged, so it never counts toward volume. Off from the workout's ⋯ menu. */
 function warmupFor(log,i){var ex=log.ex[i];if(!ex||DB.profile.noWarmup)return null;
@@ -2175,10 +2230,10 @@ function gymStart(ds,src,s,w){
     });
   }
   if(!log)return;
-  var key=newLogKey(ds);g.logs[key]=log;save();gymOpenKey(key);
+  var key=newLogKey(ds);g.logs[key]=log;save();gymOpenKey(key);geoTag(key);
 }
 function bumpR(n,ls){var b=DB.gym.bump&&DB.gym.bump[n];return b&&ls&&ls.lb>0?b:0;}
-function startSession(p,w,s){var key=newLogKey(todayStr()),log=progLog(p,w,s,true);if(!log)return;DB.gym.logs[key]=log;save();PL.prev=null;gymOpenKey(key);}
+function startSession(p,w,s){var key=newLogKey(todayStr()),log=progLog(p,w,s,true);if(!log)return;DB.gym.logs[key]=log;save();PL.prev=null;gymOpenKey(key);geoTag(key);}
 function gymOpenKey(k){var L=DB.gym.logs[k];if(!L)return;
   if(L.cardio){var c=L.cardio;V.sheet={kind:"cardio",k:k,type:c.type,min:c.min,mi:c.mi,hr:c.hr,eff:c.eff,note:c.note};render();return;}
   V.sheet={kind:"gymlog",ds:k,sum:!!L.t1};render();}
@@ -2459,7 +2514,7 @@ function feelRow(L,f,q){return '<div class="flabel">'+q+'</div><div class="chips
 function summaryHtml(k){
   var L=DB.gym.logs[k],st=logStats(L),pk=prevSame(k),pv=pk&&logStats(DB.gym.logs[pk]),prs=logPRs(k),h='';
   h+='<div class="sumtop"><span class="sumck">'+IC("checkcf")+'</span><div><div class="h1" style="font-size:22px">'+(L.off?"Done outside the app":"Workout complete")+'</div>'+
-     '<div class="ls">'+esc(L.name)+' · '+esc(dayLabel(logDate(k)))+'</div></div></div>';
+     '<div class="ls">'+esc(L.name)+' · '+esc(dayLabel(logDate(k)))+(placeName(L)?' · at '+esc(placeName(L)):'')+'</div></div></div>';
   if(L.off)return h+'<div class="fnote">Logged as done without sets, so there are no numbers for it.</div>';
   h+='<div class="sumtiles">'+sumTile("Time",st.min+" min",pv&&pv.min,st.min,"duredit")+sumTile("Volume",fmtVol(st.vol)+" lb",pv&&pv.vol,st.vol)+
      sumTile("Sets",st.sets,pv&&pv.sets,st.sets)+sumTile("Reps",st.reps,pv&&pv.reps,st.reps)+'</div>';
@@ -2500,7 +2555,7 @@ function logLine(L){
   if(L.cardio){var c=L.cardio;return [c.min+" min",c.mi?c.mi+" mi":"",c.cal?"about "+c.cal+" cal":""].filter(Boolean).join(" · ");}
   if(L.off)return "Done outside the app";
   if(!L.t1)return "In progress";
-  var v=gymVol(L);return v.sets+" set"+(v.sets===1?"":"s")+" · "+fmtVol(v.vol)+" lb · "+Math.max(1,Math.round((L.t1-L.t0)/60000))+" min";}
+  var v=gymVol(L),pl=placeName(L);return v.sets+" set"+(v.sets===1?"":"s")+" · "+fmtVol(v.vol)+" lb · "+Math.max(1,Math.round((L.t1-L.t0)/60000))+" min"+(pl?" · "+pl:"");}
 function cardioBody(){
   var sh=V.sheet,h='',t=sh.type||"run",lab=(CARDIO[t]||CARDIO.other)[0];
   h+='<div class="chips" style="margin-top:0">'+Object.keys(CARDIO).map(function(k){return '<button class="chip'+(k===t?" on":"")+'" data-act="cdtype" data-v="'+k+'">'+CARDIO[k][0]+'</button>';}).join("")+'</div>';
@@ -2924,7 +2979,8 @@ function plMain(log,ro){
   }
   if(sh.swap&&!ro&&log.ex[sh.i])return swapBody(log,log.ex[sh.i]);
   var ex=log.ex[sh.i];
-  if(!ex)return '<div class="empty">'+(log.off?"Done outside the app, so there are no sets to show.":"No exercises in this workout yet.")+'</div>'+
+  if(!ro&&!log.t1)h+=geoAskHtml(log,sh.ds);
+  if(!ex)return h+'<div class="empty">'+(log.off?"Done outside the app, so there are no sets to show.":"No exercises in this workout yet.")+'</div>'+
     (ro||log.off?'':'<button class="bigbtn ghost" data-act="gymaddex">'+IC("plus")+'Add exercise</button>');
   var vids=exVideos(ex),meta=exMeta(ex),anyDone=log.ex.some(function(e){return e.sets.some(function(x){return x.done;});});
   if(!ro&&!log.t1)h+=checkinHtml(log,sh.ds,anyDone);
@@ -4555,7 +4611,9 @@ document.addEventListener("click",function(ev){
   else if(act==="expref"){var pg=DB.gym;if(!pg.pref)pg.pref={};var pvv=+el.getAttribute("data-v");if(pvv)pg.pref[V.sheet.n]=pvv;else delete pg.pref[V.sheet.n];save();rerenderSheet();}
   else if(act==="methods"){var mk=el.getAttribute("data-k")||"";V.sheet={kind:"methods",k:mk,back:V.sheet&&V.sheet.kind!=="methods"?V.sheet:null};render();
     if(mk)setTimeout(function(){var me=document.getElementById("m-"+mk);if(me)me.scrollIntoView({block:"start"});},60);}
-  else if(act==="genopen"){V.sheet={kind:"gen",back:null};if(!EXDB)loadEXDB();render();}
+  else if(act==="genopen"){V.sheet={kind:"gen",back:null};if(!EXDB)loadEXDB();render();
+    if(DB.gym.geo)geoPing(function(p,err){if(!p){if(err==="denied")geoDenied();return;}var n=geoNearest(p);
+      if(n&&geoSetPlace(n.l)){save();showUndo("At "+n.l.name+": built from its equipment",null);if(V.sheet&&V.sheet.kind==="gen")rerenderSheet();}});}
   else if(act==="genmin"||act==="genfocus"||act==="genvar"){var gp=genPrefs(),gv=el.getAttribute("data-v");
     if(act==="genmin")gp.min=+gv;else if(act==="genfocus")gp.focus=gv;else gp.v=+gv;V.sheet.items=null;save();rerenderSheet();}
   else if(act==="genshuf"){V.sheet.items=null;rerenderSheet();}
@@ -4565,6 +4623,22 @@ document.addEventListener("click",function(ev){
   else if(act==="wuoff"||act==="wuon"){DB.profile.noWarmup=act==="wuoff";V.sheet.menu=false;save();paintPlayer();}
   else if(act==="equip"){V.sheet={kind:"equip",back:V.sheet&&V.sheet.kind!=="gymlog"?V.sheet:null};render();}
   else if(act==="locpick"){DB.gym.loc=el.getAttribute("data-v");save();rerenderSheet();}
+  else if(act==="geotog"){DB.gym.geo=!DB.gym.geo;save();rerenderSheet();
+    if(DB.gym.geo)geoPing(function(p,err){if(!p){if(err==="denied")geoDenied();rerenderSheet();return;}var n=geoNearest(p);
+      if(n){if(geoSetPlace(n.l))save();showUndo("You’re at "+n.l.name,null);}rerenderSheet();});}
+  else if(act==="geohere"){var gl=curLoc();el.disabled=true;
+    geoPing(function(p,err){if(!p){if(err==="denied")geoDenied();else showUndo("Couldn’t get a location reading. Try again outside or near a window.",null);rerenderSheet();return;}
+      gl.geo={lat:p.lat,lon:p.lon,acc:p.acc};DB.gym.geo=true;save();rerenderSheet();
+      showUndo("Saved where "+gl.name+" is. Fuel will check once when a workout starts.",null);});}
+  else if(act==="geoforget"){delete curLoc().geo;save();rerenderSheet();}
+  else if(act==="geoset"||act==="geonew"||act==="geoskip"){var gL=DB.gym.logs[V.sheet.ds];if(!gL||!gL.geo)return;
+    if(act==="geoskip"){gL.geo.skip=1;save();paintPlayer();return;}
+    var pl=null;if(act==="geonew"){pl={id:"l"+Date.now().toString(36),name:"New place",eq:LOC_PRESETS[0][1].slice()};locs().push(pl);}
+    else locs().forEach(function(l){if(l.id===el.getAttribute("data-v"))pl=l;});if(!pl)return;
+    /* a place learns its spot the first time you say you're there */
+    if(!pl.geo)pl.geo={lat:gL.geo.lat,lon:gL.geo.lon,acc:gL.geo.acc};
+    gL.geo.id=pl.id;gL.place=pl.name;geoSetPlace(pl);save();
+    if(act==="geonew"){V.sheet={kind:"locedit",back:V.sheet};render();}else{paintPlayer();showUndo("At "+pl.name+". Next time Fuel will know.",null);}}
   else if(act==="locadd"){var nl={id:"l"+Date.now().toString(36),name:"Home gym",eq:LOC_PRESETS[1][1].slice()};locs().push(nl);DB.gym.loc=nl.id;save();V.sheet={kind:"locedit",back:V.sheet};render();}
   else if(act==="locedit"){V.sheet={kind:"locedit",back:V.sheet};render();}
   else if(act==="loceq"){var lc=curLoc(),qk=el.getAttribute("data-v"),qi=lc.eq.indexOf(qk);if(qi>=0)lc.eq.splice(qi,1);else lc.eq.push(qk);save();rerenderSheet();}

@@ -390,3 +390,9 @@ Train → Library → **Training methods** is a plain-language guide to the term
 ## Strength by muscle
 
 Progress → Training shows each muscle group's strength the way Fitbod's strength score does, kept simple (`strengthByMuscle`). For Chest, Back, Shoulders, Quads, Hamstrings and glutes, and Arms: the best estimated 1-rep max (Epley) over the last 8 weeks on the group's main lift, where a big compound lift counts ahead of isolation work. Next to it, the change against the same lift in the 8 weeks before, and the max as a multiple of body weight (from `profile.weightLb`). Tap a row for that lift's history.
+
+## Where you train, by location
+
+Optional (Equipment and swaps → **Find the place by location**, stored as `gym.geo`). When a workout starts, Fuel takes **one** location reading (`getCurrentPosition`, never `watchPosition`; a reading from the last 5 minutes is reused, so opening Build a workout and then starting it asks once). The reading is matched against the places' saved spots (`loc.geo {lat, lon, acc}`) by plain distance on the phone (haversine), so no map service is used and it works offline. The nearest place within 150 m (wider, up to 500 m, when either reading was rough) becomes current, so swaps and Build a workout use its equipment, and the workout records `log.geo {lat, lon, acc, t, id}` and `log.place`.
+
+Not near any saved place: the workout asks "Where are you training?" with each place, **New place here**, or Not now. A place learns its spot the first time you pick it. The place editor can save, move or forget a spot. History lines and the summary show the place. Coordinates are rounded to 5 decimals (about a metre) and stay in the user's own Fuel data. If iOS denies location, the setting turns itself off with a note on where to allow it.
