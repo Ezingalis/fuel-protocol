@@ -12,13 +12,13 @@
      GET  /media/ex/<id>.mp4|jpg  -> exercise demo clip (signed-in, byte ranges)
      GET  /api/push/key           -> { key }            public VAPID key for workout reminders
      POST /api/push/sub|unsub     -> { ok }             this device does / doesn't get reminders (signed-in)
-     GET  /api/push/pending       -> { name, min }      what a reminder says (the service worker asks)
+     GET  /api/push/pending       -> { title, body, url } what a reminder says (the service worker asks)
    Cron (every 2 min): workout reminders, see push.js
    Secrets (set in Cloudflare, never in code): FS_KEY, FS_SECRET, ANTHROPIC_API_KEY, VAPID_JWK
 */
 import Anthropic, { toFile } from "@anthropic-ai/sdk";
 import { PROGRAM_SCHEMA, IMPORT_PROMPT, WORKERS_AI_NOTE, importError, cleanProgram } from "./program.js";
-import { okEndpoint, syncDue, saveSub, pending, vapidPublic, runReminders } from "./push.js";
+import { okEndpoint, syncDue, syncPlan, saveSub, pending, vapidPublic, runReminders } from "./push.js";
 
 const FS_URL = "https://platform.fatsecret.com/rest/server.api";
 
@@ -559,7 +559,7 @@ async function authRoute(url, request, env, ctx) {
         "ON CONFLICT(user_id) DO UPDATE SET json=excluded.json, updated_at=excluded.updated_at"
       ).bind(uid, text, at).run();
       /* an open workout's reminder time follows every save; a reminder problem never fails the save */
-      try { await syncDue(db, uid, body.state); } catch (e) {}
+      try { await syncDue(db, uid, body.state); await syncPlan(db, uid, body.state); } catch (e) {}
       return json({ ok: true, updatedAt: at });
     }
     return json({ error: "method" }, 405);

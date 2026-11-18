@@ -579,8 +579,9 @@ test("push: open an hour with 10 quiet minutes sends one signed reminder that sa
   assert.ok(await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, pub, unb64u(m[3]), new TextEncoder().encode(m[1] + "." + m[2])),
     "the JWT is signed by the key the browser subscribed with");
   const pend = await (await fetch(`${BASE}/api/push/pending`, { headers: { Cookie: cookie } })).json();
-  assert.equal(pend.name, "Push A");
-  assert.ok(pend.min >= 65 && pend.min <= 66);
+  assert.equal(pend.title, "Still working out?");
+  assert.match(pend.body, /^Push A has been open 6[56] min and nothing was logged for 10 minutes/);
+  assert.equal(pend.url, "/?open=workout");
   assert.equal(await runCron(), 0, "once per quiet spell");
 });
 
@@ -595,7 +596,6 @@ test("push: logging again re-arms it; under an hour, or finished, nothing goes o
   await putState({ "2026-11-18": { name: "Legs", t0: now - 90 * MIN, ta: now - 30 * MIN, t1: now - 29 * MIN, ex: [] },
     "2026-11-18~2": { name: "Run", t0: now - 90 * MIN, t1: 0, cardio: { type: "run" } } });
   assert.equal(await runCron(), 0, "finished workouts and cardio timers never remind");
-  assert.deepEqual(await (await fetch(`${BASE}/api/push/pending`, { headers: { Cookie: cookie } })).json(), {});
 });
 
 test("push: a device the push service says is gone is forgotten; unsubscribing works", async () => {
@@ -606,5 +606,27 @@ test("push: a device the push service says is gone is forgotten; unsubscribing w
   await putState({ "2026-11-19": { name: "Pull", t0: Date.now() - 80 * MIN, ta: Date.now() - 15 * MIN, t1: 0, ex: [] } });
   await post("/api/push/unsub", { endpoint: DEV1 });
   assert.equal(await runCron(), 0, "gone device dropped, the other unsubscribed");
+});
+
+test("reminders: weigh-in and meal times go out once a day, skipped when it's already logged", async () => {
+  const DEV2 = `http://127.0.0.1:${MOCK_PORT}/push/dev2`;
+  await post("/api/push/sub", { endpoint: DEV2 });
+  const now = new Date(), past = new Date(now.getTime() - 60000);
+  const hm = past.getUTCDate() === now.getUTCDate() ? past.toISOString().slice(11, 16) : "00:00";
+  const today = now.toISOString().slice(0, 10);
+  const state = (log) => ({ profile: { tz: "UTC", rem: { open: true, w: { on: true, t: hm, d: [0, 1, 2, 3, 4, 5, 6] },
+    bf: { on: true, t: hm }, lu: { on: false, t: hm } } }, log, gym: { logs: {} } });
+  const put = (st) => fetch(`${BASE}/api/state`, { method: "PUT", headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: JSON.stringify({ state: st, updatedAt: Date.now() }) });
+  assert.equal((await put(state({ [today]: { meals: { bf: [{ n: "Eggs" }], lu: [], di: [], sn: [] }, weights: [] } }))).status, 200);
+  assert.equal(await runCron(), 1, "breakfast is logged, lunch is off: only the weigh-in");
+  assert.equal(MOCK.push.at(-1).path, "/push/dev2");
+  const pend = await (await fetch(`${BASE}/api/push/pending`, { headers: { Cookie: cookie } })).json();
+  assert.deepEqual([pend.title, pend.url], ["Time to weigh in", "/?open=weigh"]);
+  assert.equal(await runCron(), 0, "once a day");
+  /* a settings change doesn't resend today's */
+  await put(state({ [today]: { meals: { bf: [], lu: [], di: [], sn: [] }, weights: [{ t: 1, w: 180 }] } }));
+  assert.equal(await runCron(), 0, "breakfast was already handled today, even though it's empty now");
+  await post("/api/push/unsub", { endpoint: DEV2 });
 });
 

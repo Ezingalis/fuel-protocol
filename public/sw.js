@@ -80,18 +80,17 @@ async function sliced(res, range) {
   } });
 }
 
-/* workout reminders (see push.js): the push carries no message, so ask the server what to say */
+/* reminders (see push.js): the push carries no message, so ask the server what to say */
 self.addEventListener("push", (e) => {
   e.waitUntil((async () => {
-    let body = "Your workout has been open over an hour with nothing logged for 10 minutes. Tap to finish it.";
+    let d = {};
     try {
       const r = await fetch("/api/push/pending", { credentials: "same-origin", cache: "no-store" });
-      const d = r.ok ? await r.json() : {};
-      if (d.name) body = d.name + " has been open " + (d.min < 90 ? d.min + " min" : Math.floor(d.min / 60) + " h " + (d.min % 60) + " min") +
-        " and nothing was logged for 10 minutes. Tap to finish it.";
+      if (r.ok) d = await r.json();
     } catch (err) { /* the general message is fine */ }
-    await self.registration.showNotification("Still working out?", {
-      body, tag: "workout", renotify: true, icon: "/icons/icon-192.png", data: { url: "/?open=workout" }
+    const url = /^\/\?open=[\w:]+$/.test(d.url || "") ? d.url : "/";
+    await self.registration.showNotification(d.title || "Fuel", {
+      body: d.body || "Tap to open Fuel.", tag: url, renotify: true, icon: "/icons/icon-192.png", data: { url }
     });
   })());
 });
@@ -99,10 +98,11 @@ self.addEventListener("push", (e) => {
 self.addEventListener("notificationclick", (e) => {
   e.notification.close();
   e.waitUntil((async () => {
+    const url = (e.notification.data && e.notification.data.url) || "/", open = (url.split("open=")[1] || "");
     const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     for (const w of wins) {
-      if (new URL(w.url).origin === self.location.origin) { w.postMessage({ open: "workout" }); return w.focus(); }
+      if (new URL(w.url).origin === self.location.origin) { w.postMessage({ open }); return w.focus(); }
     }
-    return self.clients.openWindow("/?open=workout");
+    return self.clients.openWindow(url);
   })());
 });

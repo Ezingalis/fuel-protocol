@@ -351,7 +351,7 @@ test("offline: install guide, code sign-in for the Home Screen app, saved clips 
 
 test("offline: the service worker cuts a saved clip to the byte range the player asks for", async () => {
   const sw = read("public/sw.js");
-  const sliced = new Function(sw.slice(sw.indexOf("async function sliced"), sw.indexOf("/* workout reminders")) + "; return sliced;")();
+  const sliced = new Function(sw.slice(sw.indexOf("async function sliced"), sw.indexOf("/* reminders (see push.js)")) + "; return sliced;")();
   const clip = () => new Response(new Uint8Array(Array.from({ length: 100 }, (_, i) => i)), { headers: { "Content-Type": "video/mp4" } });
   const a = await sliced(clip(), "bytes=10-19");
   assert.equal(a.status, 206);
@@ -526,8 +526,8 @@ test("programs: week controls exist and every move is undoable", () => {
   assert.ok(html.includes("programs:[],active:null"), "program state missing from freshDB");
 });
 
-test("schema: defines the nine tables", () => {
-  for (const t of ["users", "state", "magic_links", "shared_plans", "gym_imports", "approvals", "code_tries", "push_subs", "push_due"]) {
+test("schema: defines the eleven tables", () => {
+  for (const t of ["users", "state", "magic_links", "shared_plans", "gym_imports", "approvals", "code_tries", "push_subs", "push_due", "push_plan", "push_msg"]) {
     assert.match(schema, new RegExp(`CREATE TABLE IF NOT EXISTS ${t}`), `missing table ${t}`);
   }
 });
@@ -682,8 +682,33 @@ test("reminders: the phone opts in from a tap, the service worker shows them, th
   assert.ok(html.includes('act==="remon"') && html.includes("h+=remindCard();"));
   const sw = read("public/sw.js");
   assert.ok(sw.includes('addEventListener("push"') && sw.includes("/api/push/pending") && sw.includes("showNotification"));
-  assert.ok(sw.includes('addEventListener("notificationclick"') && html.includes("openFromReminder()"));
+  assert.ok(sw.includes('addEventListener("notificationclick"') && html.includes("openFromReminder(e.data.open)") && html.includes("openFromReminder(fromRem)"));
   assert.match(wranglerCfg, /"crons":\s*\["\*\/2 \* \* \* \*"\]/);
   assert.ok(worker.includes("async scheduled(") && worker.includes("syncDue(db, uid, body.state)"));
   assert.ok(!/VAPID_JWK\s*[:=]\s*["'{]/.test(wranglerCfg + worker), "the signing key is a secret, never in code");
 });
+
+test("reminders: food and weigh-in times, in the phone's time zone, skipped when already logged", async () => {
+  const { planItems, localNow, alreadyLogged, dueItems } = await import("../push.js");
+  const rem = { open: true, w: { on: true, t: "07:30", d: [1, 3, 5] }, bf: { on: true, t: "08:15" }, lu: { on: false, t: "12:00" }, di: { on: true, t: "bad" } };
+  assert.deepEqual(planItems(rem).map(i => [i.kind, i.at]), [["w", 450], ["bf", 495]], "off and malformed times are left out");
+  assert.deepEqual(planItems(rem)[0].days, [1, 3, 5]);
+  const t = Date.UTC(2026, 10, 18, 13, 0);   // Wed 18 Nov 2026, 13:00 UTC = 08:00 in New York
+  assert.deepEqual(localNow(t, "America/New_York"), { date: "2026-11-18", min: 480, dow: 3 });
+  assert.equal(localNow(t, "Not/AZone").min, 480, "a bad zone falls back to New York");
+  const row = { tz: "America/New_York", plan: JSON.stringify(rem), sent: "{}" };
+  assert.deepEqual(dueItems(row, t).items.map(i => i.kind), ["w"], "07:30 has come up; 08:15 hasn't");
+  assert.deepEqual(dueItems({ ...row, sent: JSON.stringify({ w: "2026-11-18" }) }, t).items, [], "already sent today");
+  assert.deepEqual(dueItems(row, t + 3 * 36e5).items, [], "more than 90 minutes late: let it go");
+  assert.deepEqual(dueItems(row, t + 864e5).items, [], "Thursday isn't a weigh-in day");
+  const st = { log: { "2026-11-18": { meals: { bf: [{}], lu: [] }, weights: [] } } };
+  assert.equal(alreadyLogged(st, "2026-11-18", "bf"), true);
+  assert.equal(alreadyLogged(st, "2026-11-18", "lu"), false);
+  assert.equal(alreadyLogged(st, "2026-11-18", "w"), false);
+  assert.equal(alreadyLogged(st, "2026-11-19", "w"), false);
+  for (const a of ["remtog", "remopen", "remday"]) assert.ok(html.includes(`act==="${a}"`), `missing ${a}`);
+  assert.ok(html.includes('contains("remt")') && html.includes("DB.profile.tz=tzn"), "times save on change; the phone's zone goes with them");
+  assert.ok(worker.includes("await syncPlan(db, uid, body.state)"));
+  for (const t2 of ["push_plan", "push_msg"]) assert.match(schema, new RegExp(`CREATE TABLE IF NOT EXISTS ${t2}`));
+});
+

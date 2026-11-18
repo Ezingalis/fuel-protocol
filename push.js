@@ -42,9 +42,11 @@ export function openWorkout(state) {
   return best;
 }
 
-/* called after each state save: keep one row per person for their open workout, or none */
+/* called after each state save: keep one row per person for their open workout, or none.
+   Settings can turn the left-open reminder off (profile.rem.open === false). */
 export async function syncDue(db, uid, state) {
-  const w = openWorkout(state);
+  const rem = state && state.profile && state.profile.rem;
+  const w = rem && rem.open === false ? null : openWorkout(state);
   if (!w) { await db.prepare("DELETE FROM push_due WHERE uid=?1").bind(uid).run(); return null; }
   await db.batch([
     db.prepare("DELETE FROM push_due WHERE uid=?1 AND k<>?2").bind(uid, w.k),
@@ -65,11 +67,98 @@ export async function saveSub(db, uid, endpoint) {
     "(SELECT endpoint FROM push_subs WHERE uid=?1 ORDER BY created DESC LIMIT ?2)").bind(uid, MAX_SUBS).run();
 }
 
-/* what the notification says: the service worker fetches this when the push arrives */
+/* what the notification says: the service worker fetches this when the push arrives.
+   Every send writes the message first (push_msg), so the newest one is what shows. */
 export async function pending(db, uid) {
-  const r = await db.prepare("SELECT name,t0 FROM push_due WHERE uid=?1 ORDER BY due DESC LIMIT 1").bind(uid).first();
-  if (!r) return {};
-  return { name: r.name, min: Math.max(1, Math.round((Date.now() - r.t0) / 60000)) };
+  const m = await db.prepare("SELECT title,body,url,at FROM push_msg WHERE uid=?1").bind(uid).first();
+  if (m && Date.now() - m.at < 30 * 60000) return { title: m.title, body: m.body, url: m.url };
+  return {};
+}
+async function setMsg(db, uid, title, body, url) {
+  await db.prepare("INSERT INTO push_msg (uid,title,body,url,at) VALUES (?1,?2,?3,?4,?5) " +
+    "ON CONFLICT(uid) DO UPDATE SET title=excluded.title, body=excluded.body, url=excluded.url, at=excluded.at")
+    .bind(uid, title, body, url, Date.now()).run();
+}
+function minText(min) { return min < 90 ? min + " min" : Math.floor(min / 60) + " h " + (min % 60) + " min"; }
+
+/* ---------- food and weigh-in reminders ----------
+   Settings keeps profile.rem: { open, w: {on, t:"07:30", d:[0..6]}, bf|lu|di|sn: {on, t} } and
+   profile.tz (the phone's time zone). Each save copies that plan into push_plan. The cron checks
+   whose times have come up in their own time zone, skips any that are already logged that day
+   (a weigh-in, or anything in that meal), and sends the rest once a day each. */
+export const MEAL_NAMES = { bf: "breakfast", lu: "lunch", di: "dinner", sn: "snacks" };
+const LATE_BY = 90; // minutes: a missed cron run still sends, a phone that synced hours late doesn't
+function hhmm(t) { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || "")); return m && +m[1] < 24 && +m[2] < 60 ? +m[1] * 60 + +m[2] : null; }
+export function planItems(rem) {
+  const out = [];
+  if (!rem || typeof rem !== "object") return out;
+  if (rem.w && rem.w.on && hhmm(rem.w.t) != null)
+    out.push({ kind: "w", at: hhmm(rem.w.t), days: Array.isArray(rem.w.d) && rem.w.d.length ? rem.w.d.map(Number) : [0, 1, 2, 3, 4, 5, 6] });
+  for (const m of Object.keys(MEAL_NAMES)) if (rem[m] && rem[m].on && hhmm(rem[m].t) != null)
+    out.push({ kind: m, at: hhmm(rem[m].t), days: [0, 1, 2, 3, 4, 5, 6] });
+  return out;
+}
+export function localNow(now, tz) {
+  const parts = tzone => {
+    const f = new Intl.DateTimeFormat("en-US", { timeZone: tzone, year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23", weekday: "short" });
+    const p = {}; for (const x of f.formatToParts(new Date(now))) p[x.type] = x.value;
+    return { date: p.year + "-" + p.month + "-" + p.day, min: (+p.hour % 24) * 60 + +p.minute,
+      dow: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(p.weekday) };
+  };
+  try { return parts(tz || "America/New_York"); } catch (e) { return parts("America/New_York"); }
+}
+/* already done today? then there's nothing to remind about */
+export function alreadyLogged(state, date, kind) {
+  const d = state && state.log && state.log[date];
+  if (!d) return false;
+  if (kind === "w") return Array.isArray(d.weights) && d.weights.length > 0;
+  return !!(d.meals && Array.isArray(d.meals[kind]) && d.meals[kind].length);
+}
+export async function syncPlan(db, uid, state) {
+  const p = state && state.profile, items = planItems(p && p.rem);
+  if (!items.length) { await db.prepare("DELETE FROM push_plan WHERE uid=?1").bind(uid).run(); return; }
+  await db.prepare("INSERT INTO push_plan (uid,tz,plan,sent) VALUES (?1,?2,?3,'{}') " +
+    "ON CONFLICT(uid) DO UPDATE SET tz=excluded.tz, plan=excluded.plan")
+    .bind(uid, String(p.tz || "").slice(0, 60), JSON.stringify(p.rem)).run();
+}
+export function dueItems(row, now) {
+  const L = localNow(now, row.tz), sent = JSON.parse(row.sent || "{}");
+  return { local: L, sent, items: planItems(JSON.parse(row.plan || "{}")).filter(it =>
+    sent[it.kind] !== L.date && it.days.includes(L.dow) && L.min >= it.at && L.min < it.at + LATE_BY) };
+}
+async function sendToAll(env, uid, title, body, url) {
+  const db = env.DB;
+  await setMsg(db, uid, title, body, url);
+  const subs = (await db.prepare("SELECT endpoint FROM push_subs WHERE uid=?1").bind(uid).all()).results || [];
+  let sent = 0;
+  for (const s of subs) {
+    try {
+      const st = await sendPush(env, s.endpoint);
+      if (st === 404 || st === 410) await db.prepare("DELETE FROM push_subs WHERE endpoint=?1").bind(s.endpoint).run();
+      else if (st < 300) sent++;
+    } catch (e) { /* one bad device doesn't stop the rest */ }
+  }
+  return sent;
+}
+async function runScheduled(env, now) {
+  const db = env.DB, rows = (await db.prepare("SELECT uid,tz,plan,sent FROM push_plan").all()).results || [];
+  let sent = 0;
+  for (const row of rows) {
+    const { local, sent: was, items } = dueItems(row, now);
+    if (!items.length) continue;
+    const st = await db.prepare("SELECT json FROM state WHERE user_id=?1").bind(row.uid).first();
+    let state = null; try { state = JSON.parse(st && st.json); } catch (e) {}
+    for (const it of items) {
+      was[it.kind] = local.date;
+      if (alreadyLogged(state, local.date, it.kind)) continue;
+      sent += it.kind === "w"
+        ? await sendToAll(env, row.uid, "Time to weigh in", "Step on the scale before you eat or drink. Tap to log it.", "/?open=weigh")
+        : await sendToAll(env, row.uid, "Log " + MEAL_NAMES[it.kind], "Nothing in " + MEAL_NAMES[it.kind] + " yet today. Tap to add it.", "/?open=meal:" + it.kind);
+    }
+    await db.prepare("UPDATE push_plan SET sent=?2 WHERE uid=?1").bind(row.uid, JSON.stringify(was)).run();
+  }
+  return sent;
 }
 
 /* ---------- VAPID ---------- */
@@ -118,19 +207,15 @@ export async function runReminders(env) {
   const db = env.DB;
   if (!db || !vapidKey(env)) return { sent: 0 };
   const now = Date.now();
-  const rows = (await db.prepare("SELECT uid,k,due FROM push_due WHERE sent=0 AND due<=?1 LIMIT 50").bind(now).all()).results || [];
+  const rows = (await db.prepare("SELECT uid,k,due,name,t0 FROM push_due WHERE sent=0 AND due<=?1 LIMIT 50").bind(now).all()).results || [];
   let sent = 0;
   for (const row of rows) {
     await db.prepare("UPDATE push_due SET sent=1 WHERE uid=?1 AND k=?2").bind(row.uid, row.k).run();
     if (now - row.due > GIVE_UP) continue;
-    const subs = (await db.prepare("SELECT endpoint FROM push_subs WHERE uid=?1").bind(row.uid).all()).results || [];
-    for (const s of subs) {
-      try {
-        const st = await sendPush(env, s.endpoint);
-        if (st === 404 || st === 410) await db.prepare("DELETE FROM push_subs WHERE endpoint=?1").bind(s.endpoint).run();
-        else if (st < 300) sent++;
-      } catch (e) { /* one bad device doesn't stop the rest */ }
-    }
+    sent += await sendToAll(env, row.uid, "Still working out?",
+      row.name + " has been open " + minText(Math.max(1, Math.round((now - row.t0) / 60000))) +
+      " and nothing was logged for 10 minutes. Tap to finish it.", "/?open=workout");
   }
+  sent += await runScheduled(env, now);
   return { sent };
 }

@@ -493,9 +493,20 @@ button.pltt{background:none;border:0;padding:0;color:var(--ink)}
 .stbtn{text-align:left;font:inherit;color:inherit;border:0;cursor:pointer}
 .stbtn .stpen{width:11px;height:11px;margin-left:4px;vertical-align:-1px;color:var(--faint)}
 .durcard{margin-top:12px}
+.remlist{margin-top:12px;border-top:1px solid var(--line2)}
+.remrow{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line2)}
+.remrow b{font-weight:600;font-size:15px}
+.remt{font:inherit;font-size:16px;font-weight:600;color:var(--ink);background:var(--card2);border:0;border-radius:10px;padding:6px 8px;min-width:0;width:auto}
+.remdays{display:flex;gap:6px;padding:10px 0;border-bottom:1px solid var(--line2)}
+.dd1{flex:1;height:34px;border-radius:10px;background:var(--card2);color:var(--sub);font-weight:600;font-size:13px;border:0}
+.dd1.on{background:var(--chipOn);color:var(--chipOnInk)}
+.sw{width:48px;height:29px;border-radius:999px;background:var(--line);position:relative;flex:0 0 auto;border:0;padding:0;transition:background .2s}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:23px;height:23px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s var(--ease)}
+.sw.on{background:var(--green)}
+.sw.on::after{transform:translateX(19px)}
 .durcard .chips{margin-top:10px}
 .durrow{display:flex;align-items:center;gap:10px;margin:12px 0 8px}
-.durrow .setin{width:90px;flex:0 0 auto;height:44px;border-radius:var(--r-sm);background:var(--card2);border:0;text-align:center;font-weight:650;color:var(--ink)}
+.durrow .durin{font-size:16px;width:90px;flex:0 0 auto;height:44px;border-radius:var(--r-sm);background:var(--card2);border:0;text-align:center;font-weight:650;color:var(--ink)}
 .durrow span{color:var(--sub);font-size:14px}
 .durrow .bigbtn{margin:0 0 0 auto;width:auto;padding:0 22px;height:44px}
 .stile b{font-size:16px;font-weight:700;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -783,6 +794,7 @@ function normalize(){
   if(DB.profile.shiftRest==null)DB.profile.shiftRest=0;
   if(!DB.profile.macroView)DB.profile.macroView="g";
   if(!DB.profile.theme)DB.profile.theme="auto";
+  try{var tzn=Intl.DateTimeFormat().resolvedOptions().timeZone;if(tzn&&DB.profile.tz!==tzn)DB.profile.tz=tzn;}catch(e){}
   if(!DB.updatedAt)DB.updatedAt=0;
   ["log","freq"].forEach(function(k){if(!DB[k])DB[k]={};});
   ["favs","custom","recipes","plans","applies","recents"].forEach(function(k){if(!DB[k])DB[k]=[];});
@@ -863,9 +875,9 @@ function withTimeout(p,ms){return Promise.race([p,new Promise(function(_,no){set
 /* Offline first: a device that has signed in before opens straight from what's saved on it,
    then checks with the server in the background, so no connection (or one bar) never holds it up. */
 function boot(){
-  var fromRem=location.search.indexOf("open=workout")>=0;
+  var fromRem=(/[?&]open=([\w:]+)/.exec(location.search)||[])[1];
   if(location.search.indexOf("signedin")>=0||fromRem)try{history.replaceState({},"",location.pathname);}catch(e){}
-  if(fromRem)setTimeout(function(){if(AUTH.state==="in")openFromReminder();},400);
+  if(fromRem)setTimeout(function(){if(AUTH.state==="in")openFromReminder(fromRem);},400);
   var lu=lsGet("fuelprotocol:lastuid");
   if(lu){AUTH.state="in";AUTH.uid=lu;AUTH.email=lsGet("fuelprotocol:lastemail")||"";LS="fuelprotocol:v5:"+lu;loadLocal();render();}
   withTimeout(api("/api/me"),8000).then(function(r){return r.ok?r.json():null;}).then(function(d){
@@ -1802,7 +1814,7 @@ function summaryHtml(k){
      sumTile("Sets",st.sets,pv&&pv.sets,st.sets)+sumTile("Reps",st.reps,pv&&pv.reps,st.reps)+'</div>';
   if(V.sheet&&V.sheet.dur)h+='<div class="card durcard"><div class="mt">How long did it take?</div>'+
      '<div class="chips">'+[45,60,75,90].map(function(m){return '<button class="chip'+(st.min===m?" on":"")+'" data-act="durset" data-v="'+m+'">'+m+' min</button>';}).join("")+'</div>'+
-     '<div class="durrow"><input id="durmin" class="setin" type="number" inputmode="numeric" min="1" max="600" value="'+st.min+'" aria-label="Minutes"><span>min</span>'+
+     '<div class="durrow"><input id="durmin" class="durin" type="number" inputmode="numeric" min="1" max="600" value="'+st.min+'" aria-label="Minutes"><span>min</span>'+
      '<button class="bigbtn" data-act="dursave">Save</button></div><div class="ls">Started at '+fmtTime(L.t0)+'.</div></div>';
   else if(L.tcap)h+='<div class="fnote">Ended at '+fmtTime(L.t1)+', a minute after your last entry. Tap Time to change it.</div>';
   h+='<div class="fnote">'+(pk?'Compared with the last time you did it, '+esc(dayLabel(logDate(pk)))+(DB.gym.logs[pk].name!==L.name?' ('+esc(DB.gym.logs[pk].name)+')':'')+'.':
@@ -2477,21 +2489,41 @@ function remOff(){
   navigator.serviceWorker.ready.then(function(reg){return reg.pushManager.getSubscription();}).then(function(sub){if(!sub)return;
     api("/api/push/unsub",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({endpoint:sub.endpoint})}).catch(function(){});
     return sub.unsubscribe();}).catch(function(){}).then(function(){REM.busy=false;REM.st="off";render();});}
+/* what to remind about, and when: profile.rem, synced to the server, which sends them (push.js) */
+var REM_DEF={w:"07:30",bf:"08:30",lu:"12:30",sn:"15:30",di:"18:30"};
+function remPlan(){var P=DB.profile;if(!P.rem)P.rem={open:true};return P.rem;}
+function remItem(k){var r=remPlan();if(!r[k])r[k]={on:false,t:REM_DEF[k]};if(k==="w"&&!r.w.d)r.w.d=[0,1,2,3,4,5,6];return r[k];}
+function remSwitch(on,act,k,label){return '<button class="sw'+(on?" on":"")+'" role="switch" aria-checked="'+(on?"true":"false")+'" aria-label="'+label+'" data-act="'+act+'"'+(k?' data-k="'+k+'"':'')+'></button>';}
+function remRow(k,title,note){var it=remItem(k);
+  return '<div class="remrow"><span class="grow"><b>'+title+'</b>'+(note?'<br><span class="ls">'+note+'</span>':'')+'</span>'+
+    (it.on?'<input type="time" class="remt" data-k="'+k+'" value="'+esc(it.t)+'" aria-label="'+title+' time">':'')+remSwitch(it.on,"remtog",k,title)+'</div>';}
 function remindCard(){
   if(!REM.st)remCheck();
-  var st=REM.st,h='<div class="card"><div class="eyebrow">Workout reminder</div>'+
-    '<div class="ls" style="margin-top:8px">A notification if a workout has been open over an hour and you haven’t logged anything for 10 minutes, so it doesn’t run for hours. Workouts left open 3 hours finish themselves at your last entry.</div>';
-  if(st==="on")h+='<div class="kv" style="margin-top:10px"><span>On for this phone</span><button class="textbtn" data-act="remoff">'+(REM.busy?"Turning off…":"Turn off")+'</button></div>';
-  else if(st==="off"||st==="error"||st==="nokey")h+=(st==="error"?'<div class="fnote">That didn’t work. Check your connection and try again.</div>':st==="nokey"?'<div class="fnote">Reminders aren’t set up on the server yet.</div>':'')+
-    '<button class="bigbtn" data-act="remon" style="margin-top:12px">'+(REM.busy?"Turning on…":"Turn on reminders")+'</button>';
+  var st=REM.st,r=remPlan(),h='<div class="card"><div class="eyebrow">Reminders</div>';
+  /* this phone first: nothing arrives until it's allowed */
+  if(st==="on")h+='<div class="kv" style="margin-top:6px"><span class="ls">Notifications are on for this phone</span><button class="textbtn" data-act="remoff">'+(REM.busy?"Turning off…":"Turn off")+'</button></div>';
+  else if(st==="off"||st==="error"||st==="nokey")h+=(st==="error"?'<div class="fnote">That didn’t work. Check your connection and try again.</div>':st==="nokey"?'<div class="fnote">Reminders aren’t set up on the server yet.</div>':
+      '<div class="ls" style="margin-top:6px">Allow notifications on this phone, then pick what to be reminded about.</div>')+
+    '<button class="bigbtn" data-act="remon" style="margin-top:10px">'+(REM.busy?"Turning on…":"Allow notifications")+'</button>';
   else if(st==="denied")h+='<div class="fnote">Notifications are off for Fuel. Turn them on in iPhone Settings → Notifications → Fuel, then come back here.</div>';
   else if(st==="install")h+='<div class="fnote">Reminders need Fuel on your Home Screen. Add it there (Settings → Put Fuel on your iPhone), open it from the icon, then turn them on here.</div>';
-  else if(st==="unsupported")h+='<div class="fnote">This browser can’t show reminders.</div>';
+  else if(st==="unsupported")h+='<div class="fnote">This browser can’t show notifications. The times below still save.</div>';
   else h+='<div class="fnote">Checking…</div>';
+  h+='<div class="remlist">'+remRow("w","Weigh-in","Skipped once you’ve weighed in that day");
+  if(remItem("w").on){var dd=remItem("w").d;
+    h+='<div class="remdays">'+["S","M","T","W","T","F","S"].map(function(l,i){var on=dd.indexOf(i)>=0;
+      return '<button class="dd1'+(on?" on":"")+'" data-act="remday" data-d="'+i+'" aria-pressed="'+on+'" aria-label="'+["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][i]+'">'+l+'</button>';}).join("")+'</div>';}
+  h+=remRow("bf","Breakfast")+remRow("lu","Lunch")+remRow("sn","Snacks")+remRow("di","Dinner")+
+    '<div class="remrow"><span class="grow"><b>Workout left open</b><br><span class="ls">Open an hour, nothing logged for 10 min</span></span>'+remSwitch(r.open!==false,"remopen","","Workout left open")+'</div></div>'+
+    '<div class="fnote">A meal reminder is skipped if something’s already logged in that meal. Times follow this phone’s time zone.</div>';
   return h+'</div>';}
-/* tapping a reminder opens the workout */
-function openFromReminder(){var k=openWorkoutKey();V.tab="gym";V.trainSub="today";V.sheet=k?{kind:"gymlog",ds:k}:null;render();}
-if("serviceWorker" in navigator)navigator.serviceWorker.addEventListener("message",function(e){if(e.data&&e.data.open==="workout"&&AUTH.state==="in")openFromReminder();});
+/* tapping a reminder opens what it's about: the workout, the weigh-in, or that meal */
+function openFromReminder(what){what=what||"workout";
+  if(what==="workout"){var k=openWorkoutKey();V.tab="gym";V.trainSub="today";V.sheet=k?{kind:"gymlog",ds:k}:null;render();return;}
+  V.tab="diary";V.date=todayStr();V.sheet=null;
+  if(/^meal:(bf|lu|di|sn)$/.test(what)){openAdd({type:"meal",meal:what.slice(5)});return;}
+  render();setTimeout(function(){var w=document.getElementById("win");if(w){w.scrollIntoView({block:"center"});w.focus();}},120);}
+if("serviceWorker" in navigator)navigator.serviceWorker.addEventListener("message",function(e){if(e.data&&typeof e.data.open==="string"&&AUTH.state==="in")openFromReminder(e.data.open);});
 function isStandalone(){try{return navigator.standalone===true||matchMedia("(display-mode: standalone)").matches;}catch(e){return false;}}
 function isIOS(){return /iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);}
 var INSTALL_PROMPT=null;
@@ -3447,9 +3479,11 @@ document.addEventListener("input",function(ev){
   }
 });
 document.addEventListener("change",function(ev){
-  if(ev.target.classList&&ev.target.classList.contains("setin")){setInput(ev.target);return;}
+  if(ev.target.classList&&ev.target.classList.contains("setin")&&ev.target.hasAttribute("data-f")){setInput(ev.target);return;}
   if(V.sheet&&V.sheet.kind==="cardio"&&/^cd(min|mi|hr|note)$/.test(ev.target.id)){cardioRead();rerenderSheet();return;}
   if(ev.target.id==="feelnote"&&V.sheet&&DB.gym.logs[V.sheet.ds]){var fn=DB.gym.logs[V.sheet.ds];if(!fn.feel)fn.feel={};fn.feel.note=ev.target.value.slice(0,500);save();return;}
+  if(ev.target.classList&&ev.target.classList.contains("remt")){var tk=ev.target.getAttribute("data-k"),tv=ev.target.value;
+    if(/^\d{2}:\d{2}$/.test(tv)){remItem(tk).t=tv;save();}return;}
   if(ev.target.id==="pdfin"){var pf=ev.target.files&&ev.target.files[0];ev.target.value="";gymImport(pf);return;}
   if(ev.target.id==="csvin"){var cf=ev.target.files&&ev.target.files[0];ev.target.value="";
     if(cf)cf.text().then(function(tx){V.sheet={kind:"csvimp",text:tx,unit:"lb"};render();});return;}
@@ -3817,6 +3851,9 @@ document.addEventListener("click",function(ev){
   else if(act==="ckoff"||act==="ckon"){DB.profile.noCheckin=act==="ckoff";V.sheet.menu=false;save();paintPlayer();
     showUndo(act==="ckoff"?"Won’t ask how you feel before workouts. Turn it back on from the ⋯ menu.":"Will ask how you feel before workouts",null);}
   else if(act==="remon"){remOn();}
+  else if(act==="remtog"){var rk=el.getAttribute("data-k"),ri=remItem(rk);ri.on=!ri.on;save();render();}
+  else if(act==="remopen"){var rp=remPlan();rp.open=rp.open===false;save();render();}
+  else if(act==="remday"){var rd=remItem("w").d,dn=+el.getAttribute("data-d"),di=rd.indexOf(dn);if(di>=0){if(rd.length>1)rd.splice(di,1);}else rd.push(dn);rd.sort();save();render();}
   else if(act==="remoff"){remOff();}
   else if(act==="bmsel"||act==="bmmode"){var bv=el.getAttribute(act==="bmsel"?"data-m":"data-v");
     if(act==="bmsel")V.bmSel=V.bmSel===bv?null:bv;else V.bmMode=bv;if(V.sheet)rerenderSheet();else render();}

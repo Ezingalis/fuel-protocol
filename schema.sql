@@ -88,3 +88,21 @@ CREATE TABLE IF NOT EXISTS push_due (
   PRIMARY KEY (uid, k)
 );
 CREATE INDEX IF NOT EXISTS idx_push_due_due ON push_due(sent, due);
+
+-- Food and weigh-in reminder times per person (copied from Settings on each sync), and which
+-- ones already went out today, by kind
+CREATE TABLE IF NOT EXISTS push_plan (
+  uid         TEXT PRIMARY KEY,
+  tz          TEXT NOT NULL,
+  plan        TEXT NOT NULL,
+  sent        TEXT NOT NULL DEFAULT '{}'
+);
+
+-- The newest reminder's words; pushes carry no payload, so the service worker reads this
+CREATE TABLE IF NOT EXISTS push_msg (
+  uid         TEXT PRIMARY KEY,
+  title       TEXT NOT NULL,
+  body        TEXT NOT NULL,
+  url         TEXT NOT NULL,
+  at          INTEGER NOT NULL
+);
