@@ -508,7 +508,7 @@ test("layout: four tabs, settings behind a gear, Train/Food/Progress split into 
   assert.ok(html.includes('var tb=[["diary","Diary"],["food","Food"],["gym","Train"],["progress","Progress"]];'), "four tabs");
   assert.match(html, /grid-template-columns:repeat\(4,1fr\)/);
   assert.ok(html.includes('data-act="nav" data-v="settings" aria-label="Settings"'), "settings is a gear in the header");
-  assert.ok(html.includes('segCtl("trainsub",tsub,[["today","Today"],["plan","Plan"],["history","History"]])'));
+  assert.ok(html.includes('segCtl("trainsub",tsub,[["today","Today"],["plan","Plan"],["history","History"],["library","Library"]])'));
   assert.ok(html.includes('segCtl("foodsub",cur,[["plans","Meal plans"],["recipes","Recipes"]])'));
   assert.ok(html.includes('segCtl("progsub",V.progSub||"body",[["body","Body & food"],["training","Training"]])'));
   assert.ok(html.includes('<div id="resume"></div>') && html.includes("function paintResume()"), "an open workout shows above the tab bar");
@@ -712,3 +712,97 @@ test("reminders: food and weigh-in times, in the phone's time zone, skipped when
   for (const t2 of ["push_plan", "push_msg"]) assert.match(schema, new RegExp(`CREATE TABLE IF NOT EXISTS ${t2}`));
 });
 
+
+/* ---------- exercise library, equipment, swaps ---------- */
+
+const libData = JSON.parse(read("public/exercises.json"));
+function libFns(DB) {
+  const src = html.slice(html.indexOf("/* ================= exercise library, equipment, swaps"), html.indexOf("/* ---------- equipment: where you train"));
+  const stubs = "var EXDB=__lib;function todayStr(){return '2026-11-18';}function dateAdd(d,n){var t=new Date(d+'T12:00:00');t.setDate(t.getDate()+n);return t.toISOString().slice(0,10);}" +
+    "function logDate(k){return k.slice(0,10);}function exVideos(){return [];}function esc(s){return String(s);}function lastSets(){return null;}";
+  const f = new Function("__lib", "DB", stubs + src + "; libIndex(); return {exEquip,exPattern,exFind,exInfoOf,exClean,swapCands,canDo,missingAt,curLoc,locs,doSwap,EXDB};");
+  return f(JSON.parse(JSON.stringify(libData)), DB);
+}
+
+test("library: free-exercise-db with steps, helper muscles, levels and two photos each, photos kept out of git", () => {
+  assert.ok(libData.length >= 850, `only ${libData.length} exercises`);
+  for (const x of libData) {
+    assert.ok(x.id && /^[A-Za-z0-9_-]+$/.test(x.id) && x.n && x.m && typeof x.lv === "number", JSON.stringify(x).slice(0, 80));
+  }
+  assert.ok(libData.filter(x => x.st && x.st.length).length / libData.length > 0.95, "nearly all have steps");
+  assert.ok(libData.filter(x => x.ph).length / libData.length > 0.95, "nearly all have photos");
+  assert.ok(libData.some(x => x.s && x.s.length), "helper muscles kept");
+  assert.match(gitignore, /^public\/lib\/$/m, "photos are rebuilt, not committed");
+  assert.ok(existsSync(join(root, "scripts/build-library.mjs")));
+  const sw = read("public/sw.js");
+  assert.ok(sw.includes('const LIBC = "fuel-lib"') && sw.includes("k !== LIBC") && sw.includes('url.pathname.startsWith("/lib/")'), "photos stay on the phone across updates");
+});
+
+test("library: equipment and movement are read from the exercise", () => {
+  const f = libFns({ gym: { logs: {} } });
+  const eq = n => f.exEquip({ n }).sort().join(",");
+  assert.equal(eq("Barbell Bench Press"), "bb,bench,rack");
+  assert.equal(eq("Incline Dumbbell Press"), "adj,db");
+  assert.equal(eq("Lat Pulldown"), "cable");
+  assert.equal(eq("Smith Machine Squat"), "smith");
+  assert.equal(eq("Hip Dominant Barbell Good Morning"), "bb,rack", "'t bar' inside a word isn't a T-bar");
+  assert.equal(eq("Pull-Ups"), "pullup");
+  assert.equal(eq("Push-Ups"), "bw");
+  assert.equal(eq("Band Pull Apart"), "band");
+  const pat = (n, m) => f.exPattern({ n, m });
+  assert.equal(pat("Barbell Row", "middle back"), "hpull");
+  assert.equal(pat("Upright Barbell Row", "shoulders"), "raise");
+  assert.equal(pat("Romanian Deadlift", "hamstrings"), "hinge");
+  assert.equal(pat("Lying Leg Curls", "hamstrings"), "legcurl");
+  assert.equal(pat("Cable Crossover", "chest"), "fly");
+  assert.equal(pat("Overhead Press", "shoulders"), "vpush");
+  assert.equal(pat("Bulgarian Split Squat", "quadriceps"), "lunge");
+});
+
+test("library: program names find their library match, cues and all", () => {
+  const f = libFns({ gym: { logs: {} } });
+  const m = (n, mu) => (f.exInfoOf(n, mu).x || {}).n;
+  assert.equal(m("Barbell Row"), "Bent Over Barbell Row");
+  assert.equal(m("Pull Up", "lats"), "Pullups");
+  assert.equal(m("Lateral Raise", "shoulders"), "Side Lateral Raise", "not the band version");
+  assert.equal(m("Skull Crusher", "triceps"), "EZ-Bar Skullcrusher");
+  assert.equal(m("Flat Dumbbell Press", "chest"), "Dumbbell Bench Press");
+  assert.equal(m('Hammer Curls "Dumbbells Touching"', "biceps"), "Hammer Curls");
+  assert.equal(f.exClean('Dips "Weighted" (Dumbbell Between Knees) + 2 more'), "Dips");
+  assert.deepEqual(f.exInfoOf("Romanian Deadlift", "hamstrings").eq, ["bb"], "a bare name borrows the library's equipment");
+  assert.deepEqual(f.exInfoOf("Poor Man's Calf Raise", "calves").eq, [], "a loose match doesn't lend a machine");
+  assert.deepEqual(f.exInfoOf("Chest Supported Row", "middle back").eq, [], "unknown is unknown, not bodyweight");
+});
+
+test("swaps: same muscle always, what you have first, your swaps and preferences count, never means never", () => {
+  const DB = { gym: { logs: {}, locs: [{ id: "g", name: "Garage", eq: ["bb", "rack", "bench", "adj", "db", "pullup", "band", "kb"] }], loc: "g",
+    swaps: { "Leg Press": { "Goblet Squat": 3 } }, pref: { "Barbell Full Squat": -9, "Dumbbell Squat": 1 } } };
+  const f = libFns(DB);
+  const c = f.swapCands({ n: "Leg Press", m: "quadriceps" }, false, 15);
+  assert.ok(c.length >= 5);
+  assert.ok(c.every(o => o.x.m === "quadriceps"), "same main muscle");
+  assert.ok(c.every(o => f.canDo(o.x.eq, f.curLoc())), "only what the garage has");
+  assert.equal(c[0].x.n, "Goblet Squat", "what you've swapped to before comes first");
+  assert.ok(!c.some(o => o.x.n === "Barbell Full Squat"), "never suggested");
+  assert.ok(c.findIndex(o => o.x.n === "Dumbbell Squat") < 5, "more often moves it up");
+  assert.ok(f.swapCands({ n: "Leg Press", m: "quadriceps" }, true, 40).some(o => !o.ok), "show-all includes ones you can't do here");
+  assert.deepEqual(f.missingAt(["legpress", "bw"], f.curLoc()), ["legpress"]);
+  /* doing the swap: new name, old one remembered, the structure kept, the old clip dropped, the swap counted */
+  const log = { ex: [{ n: "Leg Press", m: "quadriceps", sets: [{ lb: 300, reps: 10 }], st: [{ n: "Leg Press", v: "clip1", r: "10" }] }] };
+  f.doSwap(log, 0, f.EXDB.find(x => x.n === "Goblet Squat"), true);
+  assert.equal(log.ex[0].n, "Goblet Squat");
+  assert.equal(log.ex[0].was, "Leg Press");
+  assert.equal(log.ex[0].st[0].v, undefined);
+  assert.equal(log.ex[0].st[0].r, "10");
+  assert.equal(DB.gym.swaps["Leg Press"]["Goblet Squat"], 4);
+  assert.equal(DB.gym.subs["Leg Press"], "Goblet Squat", "every time");
+});
+
+test("swaps and equipment are wired in: player, programs, Library tab, planner", () => {
+  for (const a of ["swapopen", "swapdo", "swapall", "swapalways", "swapclose", "subdel", "exinfo", "expref", "equip", "locpick", "locadd", "locedit", "loceq", "locpreset", "libopen", "libset", "libsave"])
+    assert.ok(html.includes(`act==="${a}"`), `missing ${a}`);
+  assert.ok(html.includes('["history","History"],["library","Library"]'), "Library is a Train view");
+  assert.ok(html.includes("var subs=DB.gym.subs||{};") && html.includes("e.n=subs[e0.n];e.was=e0.n;"), "programs use swap-every-time");
+  assert.ok(html.includes("sesNeeds(ex)"), "the session card says what it needs");
+  assert.ok(html.includes("Photos and steps: free-exercise-db (public domain)"), "credit on the exercise page");
+});

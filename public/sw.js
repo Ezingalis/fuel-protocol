@@ -2,6 +2,7 @@
    Your data never lives here; it stays in the page (localStorage) and syncs through /api/state. */
 const VERSION = "fuel-v2";
 const MEDIA = "fuel-media"; // demo clips the user chose to save; kept across app updates
+const LIBC = "fuel-lib";     // exercise library photos, kept as they're seen (or all at once); kept across updates
 const SHELL = ["/", "/manifest.webmanifest", "/fonts/Geist-Variable.woff2", "/icons/icon-192.png", "/icons/apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
@@ -11,7 +12,7 @@ self.addEventListener("install", (e) => {
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION && k !== MEDIA).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION && k !== MEDIA && k !== LIBC).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -25,6 +26,15 @@ self.addEventListener("fetch", (e) => {
   // otherwise the network. Thumbnails are small, so they're kept as they're seen.
   if (url.pathname.startsWith("/media/")) {
     e.respondWith(fromMedia(req, url));
+    return;
+  }
+
+  // library photos: small and they never change, so a saved copy wins and a new one is kept
+  if (url.pathname.startsWith("/lib/")) {
+    e.respondWith(caches.open(LIBC).then((c) => c.match(url.pathname).then((hit) => hit || fetch(req).then((res) => {
+      if (res.status === 200) c.put(url.pathname, res.clone());
+      return res;
+    }))));
     return;
   }
 

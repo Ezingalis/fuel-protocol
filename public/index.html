@@ -494,6 +494,50 @@ button.pltt{background:none;border:0;padding:0;color:var(--ink)}
 .stbtn .stpen{width:11px;height:11px;margin-left:4px;vertical-align:-1px;color:var(--faint)}
 .durcard{margin-top:12px}
 .remlist{margin-top:12px;border-top:1px solid var(--line2)}
+.fpills{display:flex;gap:6px;overflow-x:auto;margin-top:10px;padding-bottom:2px;scrollbar-width:none}
+.fpills::-webkit-scrollbar{display:none}
+.fpill{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;padding:8px 12px;border-radius:999px;background:var(--card);box-shadow:inset 0 0 0 1px var(--line);font-weight:550;font-size:13px;color:var(--sub);border:0;white-space:nowrap}
+.fpill .ic{width:12px;height:12px}
+.fpill.set{background:var(--chipOn);color:var(--chipOnInk);box-shadow:none}
+.fpill.open{box-shadow:inset 0 0 0 1.5px var(--ink)}
+.fpanel{margin-top:10px}
+.libcount{margin:14px 2px 6px}
+.exrow .vmini{width:52px;height:36px;border-radius:8px;flex:0 0 auto;overflow:hidden;background:var(--card2);display:flex;align-items:center;justify-content:center}
+.exrow .vmini img{width:100%;height:100%;object-fit:cover}
+.exrow .vmini.lbl .ic{width:18px;height:18px;color:var(--faint)}
+.exrow .ln{white-space:normal}
+.eqmiss{color:var(--bad);font-weight:600}
+.exanim{position:relative;aspect-ratio:3/2;border-radius:var(--r-sm);overflow:hidden;background:#fff}
+.exanim img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.exanim .b{animation:exflip 2.6s ease-in-out infinite}
+@keyframes exflip{0%,30%{opacity:0}45%,80%{opacity:1}95%,100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.exanim .b{animation:none;opacity:0}}
+.exvid{margin:0}
+.exchips{margin-top:12px}
+.exeq{margin-top:10px;align-items:flex-start}
+.exeq .eqv{text-align:right;font-size:14px}
+.bm .mu.pri{fill:var(--green)}
+.bm .mu.sec{fill:var(--green);fill-opacity:.5}
+.bmdot.pri{background:var(--green);opacity:1}
+.bmdot.sec{background:var(--green);opacity:.5}
+.steps{margin:8px 0 0;padding-left:20px;font-size:14.5px;line-height:1.5;color:var(--sub)}
+.steps li+li{margin-top:8px}
+.plinfo{background:none;border:0;padding:0;text-align:left;font:inherit;color:inherit;cursor:pointer;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:4px}
+.exhdr{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.exswap{padding:0;font-size:13px}
+.swaphd{margin:4px 0 8px}
+.swapalways{width:100%;background:none;border:0;border-top:1px solid var(--line2);text-align:left;font:inherit;color:inherit}
+.swaprow{display:flex;align-items:center;gap:6px}
+.swaprow .wkrow{flex:1;min-width:0}
+.swapinfo{flex:0 0 auto}
+.hneeds{margin-top:6px}
+.eqbuy{margin:-2px 0 8px;color:var(--amber)}
+.eqbars .musr .mn{flex:0 0 44%;width:auto;text-transform:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.eqgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.eqi{display:flex;align-items:center;gap:8px;padding:10px;border-radius:var(--r-sm);background:var(--card2);border:0;font:inherit;font-size:13.5px;color:var(--sub);text-align:left}
+.eqi.on{color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--green)}
+.eqi .ic{width:18px;height:18px;color:var(--green);flex:0 0 auto}
+.eqo{width:18px;height:18px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--line);flex:0 0 auto}
 .remrow{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line2)}
 .remrow b{font-weight:600;font-size:15px}
 .remt{font:inherit;font-size:16px;font-weight:600;color:var(--ink);background:var(--card2);border:0;border-radius:10px;padding:6px 8px;min-width:0;width:auto}
@@ -1330,10 +1374,337 @@ var EXDB=null,EXDBbusy=false;
 function loadEXDB(){
   if(EXDB||EXDBbusy)return;EXDBbusy=true;
   fetch(API_BASE+"/exercises.json").then(function(r){return r.json();}).then(function(d){
-    EXDB=d;EXDBbusy=false;
-    if(V.sheet&&V.sheet.kind==="gympick")rerenderSheet();
-  }).catch(function(){EXDBbusy=false;EXDB=[];if(V.sheet&&V.sheet.kind==="gympick")rerenderSheet();});
+    EXDB=d;EXDBbusy=false;libIndex();
+    if(V.sheet)rerenderSheet();else if(V.tab==="gym")render();
+  }).catch(function(){EXDBbusy=false;EXDB=[];if(V.sheet)rerenderSheet();});
 }
+/* ================= exercise library, equipment, swaps =================
+   The library is free-exercise-db (public domain): steps, main and helper muscles, level, and two
+   photos (start and end) that play as a loop. Equipment and movement are worked out from the name
+   and fields here, the same way for program exercises, so a swap can compare any two. */
+var EQUIP=[["db","Dumbbells"],["bb","Barbell"],["rack","Squat rack"],["bench","Flat bench"],["adj","Adjustable bench"],["kb","Kettlebells"],
+  ["ez","EZ curl bar"],["trap","Trap bar"],["cable","Cable machine"],["smith","Smith machine"],["legpress","Leg press"],["machine","Weight machines"],
+  ["pullup","Pull-up bar"],["dip","Dip station"],["band","Resistance bands"],["med","Medicine ball"],["ball","Stability ball"],["foam","Foam roller"],
+  ["box","Plyo box"],["landmine","Landmine"],["sled","Sled"],["rope","Battle rope"],["trx","Suspension trainer"],["rings","Rings"],
+  ["abwheel","Ab wheel"],["cardio","Cardio machine"],["other","Other gear"]];
+var EQN={bw:"Bodyweight"};EQUIP.forEach(function(q){EQN[q[0]]=q[1];});
+function exEquip(x){
+  var n=String(x.n||"").toLowerCase(),e=String(x.e||"").toLowerCase(),c=x.c||"",out=[];
+  var add=function(k){if(out.indexOf(k)<0)out.push(k);},has=function(k){return out.indexOf(k)>=0;};
+  var band=/\bbands?\b/.test(n)||e==="bands";
+  if(/smith/.test(n))add("smith");
+  if(/leg press|hack squat/.test(n))add("legpress");
+  if(/landmine|\bt-bar\b|\bt bar\b/.test(n))add("landmine");
+  if(/trap bar|hex bar/.test(n))add("trap");
+  if(/kettlebell/.test(n)||e==="kettlebells")add("kb");
+  if(/\bsled\b|prowler/.test(n))add("sled");
+  if(/battle rope|rope (wave|slam|climb)/.test(n))add("rope");
+  if(/suspen|\btrx\b/.test(n))add("trx");
+  if(/\brings?\b/.test(n))add("rings");
+  if(/ab roller|ab wheel/.test(n))add("abwheel");
+  if(/medicine ball/.test(n)||e==="medicine ball")add("med");
+  if(/stability ball|exercise ball|swiss ball/.test(n)||e==="exercise ball")add("ball");
+  if(/foam roll/.test(n)||e==="foam roll")add("foam");
+  if(/\bbox\b|step-?ups?\b|depth jump/.test(n))add("box");
+  if(band)add("band");
+  if(!band&&(e==="cable"||/cable|pulley|pulldown|pull-down|pushdown|crossover|face pull/.test(n)))add("cable");
+  if(e==="e-z curl bar"||/\bez[- ]?(bar|curl)|e-z/.test(n))add("ez");
+  if((e==="barbell"||/barbell/.test(n))&&!has("smith")&&!has("ez")&&!has("trap"))add("bb");
+  if(has("landmine"))add("bb");
+  if(e==="dumbbell"||/dumbbell/.test(n))add("db");
+  if(e==="machine"&&!has("smith")&&!has("legpress"))add("machine");
+  if(!out.length&&/\bmachine\b|lever|pec deck|leg extension|leg curl|hip (ad|ab)duction|seated calf/.test(n))add("machine");
+  if(!band&&/pull-?ups?\b|chin-?ups?\b|hanging|muscle-?up|toes[- ]to[- ]bar/.test(n))add("pullup");
+  if(/\bdips?\b/.test(n)&&!/bench dip/.test(n)&&!has("machine"))add("dip");
+  var free=has("bb")||has("db")||has("ez")||has("kb");
+  if(free&&/incline|decline/.test(n))add("adj");
+  else if((free&&/bench|lying|seated|preacher|skull|chest[- ]supported/.test(n))||/bench dip/.test(n))add("bench");
+  if(has("bb")&&/squat|overhead press|military|standing press|push press|bench press|good morning|lunge|split squat|shoulder press|rack/.test(n)&&!has("box"))add("rack");
+  if(c==="cardio"&&/bike|cycl|rower|rowing|treadmill|elliptical|stair|recumbent|ski/.test(n))add("cardio");
+  if(!out.length)add(e==="other"?"other":"bw");
+  return out;}
+var PATS=[["hpush","Push: chest"],["vpush","Push: overhead"],["hpull","Pull: row"],["vpull","Pull: down"],["squat","Squat"],["hinge","Hinge"],
+  ["lunge","Lunge / one leg"],["thrust","Hip thrust / bridge"],["legcurl","Leg curl"],["legext","Leg extension"],["fly","Fly"],["raise","Raise"],
+  ["reardelt","Rear delt"],["curl","Curl"],["triceps","Triceps"],["shrug","Shrug"],["calf","Calf"],["core","Core"],["rotation","Rotation"],
+  ["carry","Carry"],["hipiso","Hip in / out"],["forearm","Forearm / grip"],["neck","Neck"],["plyo","Jump"],["olympic","Olympic lift"],
+  ["cardio","Cardio"],["stretch","Stretch"],["other","Other"]];
+var PATN={};PATS.forEach(function(q){PATN[q[0]]=q[1];});
+function exPattern(x){
+  var n=String(x.n||"").toLowerCase(),m=x.m||"",c=x.c||"";
+  if(c==="stretching"||/stretch|\bsmr\b|foam roll/.test(n))return "stretch";
+  if(c==="cardio")return "cardio";
+  if(c==="olympic weightlifting"||/\b(clean|snatch|jerk)\b/.test(n))return "olympic";
+  if(c==="plyometrics"||/jump|bound|\bhops?\b|skater/.test(n))return "plyo";
+  if(/farmer|carry|yoke|suitcase walk/.test(n))return "carry";
+  if(/shrug/.test(n))return "shrug";
+  if(m==="calves"||/calf raise/.test(n))return "calf";
+  if(m==="neck")return "neck";
+  if(m==="forearms")return "forearm";
+  if(m==="adductors"||m==="abductors"||/abduction|adduction/.test(n))return "hipiso";
+  if(/pull-?ups?\b|chin-?ups?\b|pulldown|pull-down|muscle-?up|pullover|straight[- ]arm/.test(n))return "vpull";
+  if(/face pull|rear delt|reverse fly|reverse flye|rear lateral|bent[- ]over lateral/.test(n))return "reardelt";
+  if(/\brows?\b|rowing/.test(n)&&!/upright/.test(n))return "hpull";
+  if(m==="shoulders"&&/upright row|raise/.test(n))return "raise";
+  if(/\bfly\b|\bflyes?\b|crossover|pec deck|butterfly/.test(n))return "fly";
+  if(/curl/.test(n)&&(m==="hamstrings"||/leg curl|hamstring curl|nordic/.test(n)))return "legcurl";
+  if(/curl/.test(n))return "curl";
+  if(/leg extension/.test(n))return "legext";
+  if(m==="triceps"&&/extension|pushdown|push-down|kickback|skull|french/.test(n))return "triceps";
+  if((m==="glutes"||m==="hamstrings")&&/thrust|bridge|pull-through|kickback|donkey/.test(n))return "thrust";
+  if(/deadlift|\brdl\b|good morning|hyperextension|back extension|stiff|swing/.test(n))return "hinge";
+  if(/lunge|split squat|step-?up|pistol|single[- ]leg squat|bulgarian/.test(n))return "lunge";
+  if(/squat|leg press|hack/.test(n))return "squat";
+  if(/overhead|military|shoulder press|arnold|push press|handstand|pike push/.test(n)||(m==="shoulders"&&/press/.test(n)))return "vpush";
+  if(/press|push-?ups?\b|\bdips?\b/.test(n))return "hpush";
+  if(m==="abdominals")return /twist|rotation|woodchop|wood chop|russian|windmill|oblique/.test(n)?"rotation":"core";
+  return {"lower back":"hinge",quadriceps:"squat",hamstrings:"hinge",glutes:"thrust",chest:"hpush",shoulders:"raise",lats:"vpull",
+    "middle back":"hpull",traps:"shrug",biceps:"curl",triceps:"triceps"}[m]||"other";}
+var EXBYN={};
+/* a program exercise's equipment and movement: the library's when it's in there ("Romanian Deadlift" is a barbell lift),
+   else read from the name */
+/* program names carry cues: 'Side Laterals "Fixed Elbow"', "Dips (Weighted) + 2 more". Match on the movement. */
+function exClean(n){return String(n||"").split(" + ")[0].replace(/"[^"]*"/g," ").replace(/\([^)]*\)/g," ").replace(/\b(TIP|EXTREME STRETCH)\b/g," ").replace(/\s+/g," ").trim()||String(n||"");}
+function exInfoOf(n,m){
+  var c=exClean(n),x=EXDB&&exFind(c,m),named=exEquip({n:c}),own=!(named.length===1&&named[0]==="bw");
+  /* equipment named in the program wins; the library adds what goes with it (a bench for a dumbbell press) */
+  /* a loose match ("Poor Man's Calf Raise" ~ the machine one) lends its photos, not its equipment */
+  if(x){var eq=own?(x.eq.some(function(k){return k!=="bw"&&named.indexOf(k)>=0;})?named.concat(x.eq.filter(function(k){return named.indexOf(k)<0;})):named):EXF_J>=0.66?x.eq:[];
+    return {eq:eq,p:x.p,x:x};}
+  /* no match and no equipment in the name: unknown, not bodyweight ("Chest Supported Row" needs something) */
+  if(!own&&!/push-?up|pull-?up|chin-?up|\bdips?\b|plank|crunch|sit-?up|burpee|jumping|climber|bodyweight|air squat|hollow|leg raise|bird dog|dead bug|glute bridge/i.test(c))named=[];
+  return {eq:named,p:exPattern({n:c,m:m}),x:null};}
+function libIndex(){EXBYN={};(EXDB||[]).forEach(function(x){x.eq=exEquip(x);x.p=exPattern(x);EXBYN[x.n.toLowerCase()]=x;});}
+/* a program's "Flat DB Press" to the library's "Dumbbell Bench Press": exact name, else the most shared words */
+var EX_WORDS={db:"dumbbell",dbs:"dumbbell",bb:"barbell",kb:"kettlebell",ohp:"overhead press",rdl:"romanian deadlift",sldl:"stiff legged deadlift",
+  ez:"ez",flat:"bench",deads:"deadlift",deadlifts:"deadlift",stiffs:"stiff",pulldowns:"pulldown",flys:"fly",flyes:"fly",curls:"curl",raises:"raise",rows:"row",presses:"press",extensions:"extension",squats:"squat",lunges:"lunge"};
+var EX_PHRASE=[[/\bpull[- ]?ups?\b/g,"pullup"],[/\bchin[- ]?ups?\b/g,"chinup"],[/\bpush[- ]?ups?\b/g,"pushup"],[/\bsit[- ]?ups?\b/g,"situp"],
+  [/\bstep[- ]?ups?\b/g,"stepup"],[/\bskull ?crushers?\b/g,"skullcrusher"],[/\bpull[- ]?downs?\b/g,"pulldown"],[/\bpush[- ]?downs?\b/g,"pushdown"],
+  [/\boverhead press\b/g,"shoulder press"],[/\bsmith machine\b/g,"smith"],[/\bpec deck\b/g,"butterfly"],[/\bt[- ]bar\b/g,"tbar"],[/\be-?z\b/g,"ez"]];
+var EX_EQW=/^(band|cable|machine|smith|kettlebell|ball|lever|leverage|sled|landmine|tbar|suspension|suspended|ez|barbell|dumbbell)$/;
+function exWords(n){var t=String(n||"").toLowerCase();EX_PHRASE.forEach(function(r){t=t.replace(r[0],r[1]);});
+  return t.replace(/[^a-z0-9 ]/g," ").split(/\s+/).map(function(w){w=EX_WORDS[w]||w;return w.length>3&&/s$/.test(w)&&!/ss$/.test(w)?w.slice(0,-1):w;})
+    .join(" ").split(" ").filter(function(w){return w.length>1&&!/^(the|with|and|on|of|to|grip|standing|attachment|bar)$/.test(w);});}
+/* best library match: shared words, plus the same movement, minus equipment the name didn't ask for */
+function exFind(n,m){if(!EXDB)return null;var hit=EXBYN[String(n||"").toLowerCase()];EXF_J=1;if(hit&&(!m||hit.m===m))return hit;
+  var A=exWords(n),ap=exPattern({n:n,m:m||""}),best=null,bs=0;EXF_J=0;if(!A.length)return null;
+  EXDB.forEach(function(x){if(m&&x.m!==m)return;var B=exWords(x.n),inter=0;A.forEach(function(w){if(B.indexOf(w)>=0)inter++;});
+    var j=inter/(A.length+B.length-inter);if(j<0.5&&!(inter===A.length&&j>=0.3))return;
+    var sc=j+(x.p===ap?0.2:0)-B.filter(function(w){return EX_EQW.test(w)&&A.indexOf(w)<0;}).reduce(function(t,w){return t+(w==="band"?0.3:0.15);},0)
+      -0.15*A.filter(function(w){return EX_EQW.test(w)&&B.indexOf(w)<0;}).length;
+    if(sc>bs){bs=sc;best=x;EXF_J=j;}});
+  return best;}
+var EXF_J=1;
+/* where you train: each place has its equipment (Fitbod calls these Locations) */
+function locs(){var g=DB.gym;if(!g.locs||!g.locs.length){g.locs=[{id:"l1",name:"My gym",eq:EQUIP.map(function(q){return q[0];})}];g.loc="l1";}return g.locs;}
+function curLoc(){var L=locs();for(var i=0;i<L.length;i++)if(L[i].id===DB.gym.loc)return L[i];return L[0];}
+var LOC_PRESETS=[["Full gym",EQUIP.map(function(q){return q[0];})],["Home gym",["db","bench","adj","band","pullup","kb"]],
+  ["Garage gym",["bb","rack","bench","adj","db","pullup","band","kb","landmine"]],["Bodyweight only",[]]];
+function canDo(eq,loc){loc=loc||curLoc();return eq.every(function(k){return k==="bw"||loc.eq.indexOf(k)>=0;});}
+function missingAt(eq,loc){loc=loc||curLoc();return eq.filter(function(k){return k!=="bw"&&loc.eq.indexOf(k)<0;});}
+function eqText(eq,loc){return eq.map(function(k){var miss=loc&&k!=="bw"&&loc.eq.indexOf(k)<0;return miss?'<b class="eqmiss">'+esc(EQN[k]||k)+'</b>':esc(EQN[k]||k);}).join(" · ");}
+/* how much you've done each exercise: sets, last 180 days */
+var EX_MUS={};
+function exUse(days){var out={},from=dateAdd(todayStr(),-(days||180));
+  Object.keys(DB.gym.logs).forEach(function(k){if(logDate(k)<from)return;var L=DB.gym.logs[k];if(!L.t1)return;
+    (L.ex||[]).forEach(function(ex){var n=ex.sets.filter(function(x){return x.done;}).length;if(n){out[ex.n]=(out[ex.n]||0)+n;EX_MUS[ex.n]=ex.m;}});});
+  return out;}
+/* Fitbod-style replacement: same main muscle always; then the same movement, then what you've swapped to or done
+   before, your more/less preferences, and the equipment where you are. Excluded exercises never come up. */
+function swapCands(ex,all,max){
+  if(!EXDB)return [];
+  var me=exInfoOf(ex.n,ex.m),p=me.p,meq=me.eq,loc=curLoc(),use=exUse(365),
+    sw=(DB.gym.swaps||{})[ex.n]||{},pref=DB.gym.pref||{},mine=me.x,out=[];
+  EXDB.forEach(function(x){
+    if(x.n===ex.n||x===mine||x.m!==ex.m||x.p==="stretch"||x.p==="cardio"||pref[x.n]===-9)return;
+    var ok=canDo(x.eq,loc);if(!ok&&!all)return;
+    var s=0;
+    if(x.p===p)s+=40;
+    if(sw[x.n])s+=30+Math.min(20,sw[x.n]*5);
+    if(use[x.n])s+=20;
+    if(pref[x.n]===1)s+=15;else if(pref[x.n]===-1)s-=20;
+    if(mine&&mine.mc&&mine.mc===x.mc)s+=8;
+    if(x.eq.some(function(k){return k!=="bw"&&meq.indexOf(k)>=0;}))s+=5;
+    if(x.lv===2)s-=6;
+    if(x.c!=="strength"&&x.c!=="powerlifting")s-=15;
+    out.push({x:x,s:s,ok:ok,used:use[x.n]||0,swapped:sw[x.n]||0});});
+  out.sort(function(a,b){return b.s-a.s||(a.x.n<b.x.n?-1:1);});
+  return out.slice(0,max||15);}
+function exThumb(x){return x&&x.ph?'<span class="vmini"><img src="/lib/'+x.id+'/0.jpg" alt="" loading="lazy" onerror="this.remove()"></span>':'<span class="vmini lbl">'+IC("gym")+'</span>';}
+/* the two photos as a loop: start, end, start */
+function exAnim(x){return x&&x.ph?'<div class="exanim"><img src="/lib/'+x.id+'/0.jpg" alt="'+esc(x.n)+', start"><img class="b" src="/lib/'+x.id+'/1.jpg" alt="'+esc(x.n)+', end"></div>':'';}
+/* demo clips from your programs, by step name, for library pages that match one */
+function progVideoFor(n){var hit=null,want=String(n||"").toLowerCase();
+  (DB.gym.programs||[]).forEach(function(p){(p.weeks||[]).forEach(function(w){(w.sessions||[]).forEach(function(se){(se.ex||[]).forEach(function(e){
+    if(hit)return;if(String(e.n).toLowerCase()===want){var v=exVideos(e)[0];if(v)hit=v;}});});});});return hit;}
+/* ---------- Train > Library ---------- */
+var LIBF={q:"",mus:"all",eq:"mine",pat:"all",lv:"all",open:"",n:40,sort:"az"};
+var LIB_MUS=["chest","shoulders","triceps","biceps","forearms","lats","middle back","traps","lower back","abdominals","quadriceps","hamstrings","glutes","adductors","abductors","calves","neck"];
+function libFiltered(){
+  var f=LIBF,q=f.q.toLowerCase().trim(),words=q?exWords(q):[],loc=curLoc(),use=exUse(3650);
+  var list=EXDB.filter(function(x){
+    if(f.mus!=="all"&&x.m!==f.mus)return false;
+    if(f.pat!=="all"&&x.p!==f.pat)return false;
+    if(f.lv!=="all"&&x.lv!==+f.lv)return false;
+    if(f.eq==="mine"&&!canDo(x.eq,loc))return false;
+    if(f.eq!=="mine"&&f.eq!=="all"&&x.eq.indexOf(f.eq)<0)return false;
+    if(q&&x.n.toLowerCase().indexOf(q)<0){var B=exWords(x.n);
+      if(!words.every(function(w){return B.some(function(b){return b.indexOf(w)===0;});}))return false;}
+    return true;});
+  if(f.sort==="used")list.sort(function(a,b){return (use[b.n]||0)-(use[a.n]||0)||(a.n<b.n?-1:1);});
+  return {list:list,use:use};}
+function libRows(){
+  var r=libFiltered(),h='<div class="ls num libcount">'+r.list.length+' exercise'+(r.list.length===1?'':'s')+'</div><div class="wklist">';
+  r.list.slice(0,LIBF.n).forEach(function(x){var u=r.use[x.n];
+    h+='<button class="wkrow exrow" data-act="exinfo" data-n="'+esc(x.n)+'">'+exThumb(x)+'<span class="grow"><span class="ln">'+esc(x.n)+'</span><br>'+
+      '<span class="ls">'+esc(capFirst(x.m))+' · '+eqText(x.eq)+(u?' · '+u+' sets done':'')+'</span></span>'+IC("caretr")+'</button>';});
+  h+='</div>';
+  if(r.list.length>LIBF.n)h+='<button class="bigbtn ghost" data-act="libmore">Show more</button>';
+  if(!r.list.length)h+='<div class="empty">Nothing matches. Try fewer filters'+(LIBF.eq==="mine"?', or All equipment':'')+'.</div>';
+  return h;}
+function libPill(k,label,val){return '<button class="fpill'+(LIBF.open===k?" open":"")+(val?" set":"")+'" data-act="libopen" data-v="'+k+'">'+(val||label)+IC("caretd")+'</button>';}
+function libraryView(){
+  if(!EXDB){loadEXDB();return '<div class="empty">Loading the exercise library…</div>';}
+  var f=LIBF,loc=curLoc(),h='';
+  h+='<input id="libq" type="search" autocomplete="off" placeholder="Search '+EXDB.length+' exercises" value="'+esc(f.q)+'" style="margin-top:14px">';
+  h+='<div class="fpills">'+libPill("mus","Muscle",f.mus==="all"?"":capFirst(f.mus))+
+    libPill("eq","Equipment",f.eq==="mine"?loc.name:f.eq==="all"?"All equipment":EQN[f.eq])+
+    libPill("pat","Movement",f.pat==="all"?"":PATN[f.pat])+libPill("lv","Level",f.lv==="all"?"":["Beginner","Intermediate","Expert"][+f.lv])+
+    '<button class="fpill'+(f.sort==="used"?" set":"")+'" data-act="libsort">'+(f.sort==="used"?"Most done":"A to Z")+'</button></div>';
+  var opt=function(k,v,label){return '<button class="chip'+(String(f[k])===String(v)?" on":"")+'" data-act="libset" data-k="'+k+'" data-v="'+esc(v)+'">'+esc(label)+'</button>';};
+  if(f.open==="mus")h+='<div class="chips fpanel">'+opt("mus","all","All muscles")+LIB_MUS.map(function(m){return opt("mus",m,capFirst(m));}).join("")+'</div>';
+  if(f.open==="eq")h+='<div class="chips fpanel">'+opt("eq","mine","What "+loc.name+" has")+opt("eq","all","All equipment")+opt("eq","bw","Bodyweight")+
+    EQUIP.map(function(q){return opt("eq",q[0],q[1]);}).join("")+'</div>';
+  if(f.open==="pat")h+='<div class="chips fpanel">'+opt("pat","all","All movements")+PATS.map(function(q){return opt("pat",q[0],q[1]);}).join("")+'</div>';
+  if(f.open==="lv")h+='<div class="chips fpanel">'+opt("lv","all","All levels")+opt("lv","0","Beginner")+opt("lv","1","Intermediate")+opt("lv","2","Expert")+'</div>';
+  h+='<button class="card instbar" data-act="equip" style="margin-top:12px">'+IC("gym")+'<span class="grow"><b>Equipment and swaps</b><br><span class="ls">'+esc(loc.name)+
+    ' · what your workouts need, what to buy next</span></span>'+IC("caretr")+'</button>';
+  h+=libPhotosCard();
+  return h+'<div id="liblist">'+libRows()+'</div>';}
+/* every library photo on the phone at once (they're also kept one by one as you look) */
+var LIB_CACHE="fuel-lib",LDL={saved:null,busy:false,done:0,total:0,err:0};
+function libPhotoPaths(){var out=[];(EXDB||[]).forEach(function(x){if(x.ph)out.push("/lib/"+x.id+"/0.jpg","/lib/"+x.id+"/1.jpg");});return out;}
+function libCountSaved(){if(!("caches" in window)){LDL.saved=-1;return;}LDL.saved=-1;
+  caches.open(LIB_CACHE).then(function(c){return c.keys();}).then(function(k){LDL.saved=k.length;if(V.tab==="gym")render();}).catch(function(){});}
+function libPhotosCard(){
+  if(!("caches" in window))return "";
+  var all=libPhotoPaths().length;if(LDL.saved==null){libCountSaved();return "";}
+  if(LDL.busy)return '<div class="card"><div class="mealhd"><span class="mt">Saving photos</span><span class="mcal num">'+LDL.done+' of '+LDL.total+'</span></div>'+
+    '<div class="calbar" style="height:6px;margin-top:12px"><i style="width:'+Math.round(LDL.done/Math.max(1,LDL.total)*100)+'%;background:linear-gradient(90deg,var(--ring1),var(--ring2))"></i></div></div>';
+  if(LDL.saved<0||LDL.saved>=all)return "";
+  return '<button class="card instbar" data-act="libsave">'+IC("download")+'<span class="grow"><b>Photos with no Wi-Fi</b><br><span class="ls num">'+
+    (LDL.saved?Math.floor(LDL.saved/2)+' of '+all/2+' saved. ':'')+'Save all '+all/2+', about 25 MB</span></span>'+IC("caretr")+'</button>';}
+function libSave(){
+  if(LDL.busy||!("caches" in window))return;
+  try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();}catch(e){}
+  var paths=libPhotoPaths();LDL.busy=true;LDL.done=0;LDL.total=paths.length;LDL.err=0;render();var last=0;
+  caches.open(LIB_CACHE).then(function(c){return c.keys().then(function(keys){
+    var have={};keys.forEach(function(r){have[new URL(r.url).pathname]=1;});var q=paths.filter(function(p2){return !have[p2];});LDL.done=LDL.total-q.length;
+    function one(){var p2=q.shift();if(!p2)return Promise.resolve();
+      return fetch(p2).then(function(r){if(r.status===200)return c.put(p2,r);throw 0;}).catch(function(){LDL.err++;})
+        .then(function(){LDL.done++;if(Date.now()-last>600){last=Date.now();if(V.tab==="gym")render();}return one();});}
+    return Promise.all([one(),one(),one(),one(),one(),one()]);});})
+  .catch(function(){LDL.err=LDL.total;}).then(function(){LDL.busy=false;LDL.saved=null;render();
+    showUndo(LDL.err?"Saved all but "+LDL.err+" photos":"Exercise photos saved. The library works with no connection",null);});}
+/* ---------- one exercise: how it moves, what it works, how to do it ---------- */
+function exInfoBody(){
+  var sh=V.sheet;if(!EXDB){loadEXDB();return '<div class="empty">Loading…</div>';}
+  var x=EXBYN[String(sh.n).toLowerCase()]||exFind(sh.n,sh.m),name=sh.n,m=x?x.m:(sh.m||"other"),loc=curLoc();
+  var sec=x?(x.s||[]):helperMuscles(name,m),eq=x?x.eq:exEquip({n:name}),pt=x?x.p:exPattern({n:name,m:m}),vid=sh.v?{v:sh.v}:progVideoFor(name),h='';
+  if(vid)h+='<div class="plvid exvid"><video src="/media/ex/'+vid.v+'.mp4" poster="/media/ex/'+vid.v+'.jpg" autoplay muted loop playsinline preload="auto"></video></div>';
+  else h+=exAnim(x);
+  if(x&&x.n!==name)h+='<div class="fnote">Closest match in the library: '+esc(x.n)+'.</div>';
+  h+='<div class="chips exchips">'+[capFirst(m),PATN[pt]].concat(x?[["Beginner","Intermediate","Expert"][x.lv],x.mc==="c"?"Compound":x.mc==="i"?"Isolation":""]:[])
+    .filter(Boolean).map(function(t){return '<span class="mtag">'+esc(t)+'</span>';}).join("")+'</div>';
+  var miss=missingAt(eq,loc);
+  h+='<div class="kv exeq"><span>Needs</span><span class="eqv">'+eqText(eq,loc)+'</span></div>'+
+    (miss.length?'<div class="fnote">'+esc(loc.name)+' doesn’t have '+esc(miss.map(function(k){return EQN[k];}).join(", "))+'. Similar ones below are sorted by what you have.</div>':'');
+  var st={};st[m]="pri";sec.forEach(function(s2){if(!st[s2])st[s2]="sec";});
+  h+='<div class="card bmcard"><div class="mealhd"><span class="mt">What it works</span></div><div class="bmwrap">'+bodyMapSvg(st,null)+
+    '<div class="bmleg"><div class="bml"><i class="bmdot pri"></i><span class="grow">'+esc(capFirst(m))+'</span></div>'+
+    (sec.length?'<div class="bml"><i class="bmdot sec"></i><span class="grow">'+esc(capFirst(sec.join(", ")))+'</span></div>':'')+
+    '<div class="ls" style="white-space:normal">Dark: the main muscle. Light: muscles that help.</div></div></div></div>';
+  if(x&&x.st&&x.st.length)h+='<div class="card"><div class="mealhd"><span class="mt">How to do it</span></div><ol class="steps">'+x.st.map(function(t){return '<li>'+esc(t)+'</li>';}).join("")+'</ol></div>';
+  var hist=exHist(name);
+  if(hist.length){var b=exBest(hist);
+    h+='<button class="card instbar" data-act="stex" data-n="'+esc(name)+'">'+IC("progress")+'<span class="grow"><b>Your history</b><br><span class="ls num">'+hist.length+' workout'+(hist.length===1?'':'s')+
+      (b.e1?' · best est. 1RM '+Math.round(b.e1)+' lb':b.topReps?' · best '+b.topReps+' reps':'')+'</span></span>'+IC("caretr")+'</button>';}
+  var pv=(DB.gym.pref||{})[name]||0;
+  h+='<div class="card"><div class="mealhd"><span class="mt">Suggest it</span></div><div class="chips">'+[[1,"More often"],[0,"Normal"],[-1,"Less often"],[-9,"Never"]].map(function(o){
+    return '<button class="chip'+(pv===o[0]?" on":"")+'" data-act="expref" data-v="'+o[0]+'">'+o[1]+'</button>';}).join("")+
+    '</div><div class="fnote">Used when sorting swaps. Never keeps it out of swap suggestions.</div></div>';
+  var sim=swapCands({n:name,m:m},true,8);
+  if(sim.length){h+='<div class="card"><div class="mealhd"><span class="mt">Similar exercises</span></div><div class="wklist">';
+    sim.forEach(function(c){h+='<button class="wkrow exrow" data-act="exinfo" data-n="'+esc(c.x.n)+'">'+exThumb(c.x)+'<span class="grow"><span class="ln">'+esc(c.x.n)+'</span><br><span class="ls">'+
+      eqText(c.x.eq,loc)+'</span></span>'+IC("caretr")+'</button>';});h+='</div></div>';}
+  if(x)h+='<div class="fnote">Photos and steps: free-exercise-db (public domain). Muscle drawing: MuscleMap (MIT).</div>';
+  return h;}
+/* ---------- swap an exercise in the workout ---------- */
+function swapBody(log,ex){
+  var sh=V.sheet,loc=curLoc(),eq=exInfoOf(ex.n,ex.m).eq,miss=missingAt(eq,loc),c=swapCands(ex,!!sh.swapAll,15),h='';
+  h+='<div class="swaphd"><div class="plname">Swap '+esc(ex.n)+'</div><div class="ls">Needs '+eqText(eq,loc)+(miss.length?' · not all at '+esc(loc.name):'')+'</div></div>';
+  h+='<button class="remrow swapalways" data-act="swapalways"><span class="grow"><b>Swap it every time</b><br><span class="ls">In this program and later workouts, until you undo it in Equipment and swaps</span></span>'+
+    '<span class="sw'+(sh.swapEvery?" on":"")+'"></span></button>';
+  if(!c.length)h+='<div class="empty">'+(sh.swapAll?'No other '+esc(ex.m)+' exercises in the library.':'Nothing for '+esc(ex.m)+' with what '+esc(loc.name)+' has.')+'</div>';
+  h+='<div class="wklist">';
+  c.forEach(function(o,i){var why=o.swapped?'you’ve swapped to it before':o.used?'you’ve done it':'';
+    h+='<div class="swaprow"><button class="wkrow exrow" data-act="swapdo" data-i="'+i+'">'+exThumb(o.x)+'<span class="grow"><span class="ln">'+esc(o.x.n)+'</span><br><span class="ls">'+
+      eqText(o.x.eq,loc)+(why?' · '+why:'')+'</span></span></button><button class="sx swapinfo" data-act="exinfo" data-n="'+esc(o.x.n)+'" aria-label="About '+esc(o.x.n)+'">'+IC("list")+'</button></div>';});
+  sh.swapC=c;
+  h+='</div><div style="text-align:center">'+(sh.swapAll?'<button class="textbtn" data-act="swapall">Only what '+esc(loc.name)+' has</button>':
+    '<button class="textbtn" data-act="swapall">Show ones that need other equipment</button>')+'</div>';
+  return h;}
+function doSwap(log,ei,x,every){
+  var ex=log.ex[ei];if(!ex)return;var old=ex.n,last=lastSets(x.n);
+  ex.was=ex.was||old;ex.n=x.n;ex.m=x.m;
+  /* the round structure (drop sets, rest-pause) stays; the demo clips belong to the old exercise */
+  if(ex.st)ex.st=ex.st.map(function(s2){var c={};for(var k in s2)if(k!=="v")c[k]=s2[k];c.n=x.n;return c;});
+  ex.sets.forEach(function(st2,i){var ls=last&&last[Math.min(i,last.length-1)];st2.lb=ls&&ls.lb>0?ls.lb:0;delete st2.lb0;});
+  var g=DB.gym;if(!g.swaps)g.swaps={};if(!g.swaps[old])g.swaps[old]={};g.swaps[old][x.n]=(g.swaps[old][x.n]||0)+1;
+  if(every){if(!g.subs)g.subs={};g.subs[ex.was]=x.n;}}
+/* ---------- equipment: where you train, what workouts need, what to buy ---------- */
+function progEx(){var a=DB.gym.active,p=a&&progById(a.pid),out={};
+  if(p)(p.weeks[a.w]||p.weeks[0]).sessions.forEach(function(se){se.ex.forEach(function(e){var n=(DB.gym.subs||{})[e.n]||e.n;out[n]=(out[n]||0)+1;if(!EX_MUS[n])EX_MUS[n]=e.m;});});
+  return {p:p,ex:out};}
+function equipBody(){
+  if(!EXDB){loadEXDB();return '<div class="empty">Loading…</div>';}
+  var L=locs(),loc=curLoc(),h='';
+  h+='<div class="flabel">Where you train</div><div class="chips">'+L.map(function(l){return '<button class="chip'+(l.id===loc.id?" on":"")+'" data-act="locpick" data-v="'+l.id+'">'+esc(l.name)+'</button>';}).join("")+
+    '<button class="chip" data-act="locadd">'+IC("plus")+'Add a place</button></div>';
+  h+='<div class="kv" style="margin-top:8px"><span class="ls">'+(loc.eq.length?loc.eq.length+' kinds of equipment':'Bodyweight only')+'</span><button class="textbtn" data-act="locedit">Edit '+esc(loc.name)+'</button></div>';
+  /* the program's needs, this week */
+  var pe=progEx(),need={};
+  Object.keys(pe.ex).forEach(function(n){exInfoOf(n,EX_MUS[n]).eq.forEach(function(k){if(k!=="bw"){if(!need[k])need[k]=[];need[k].push(n);}});});
+  var nk=Object.keys(need).sort(function(a,b){return need[b].length-need[a].length;});
+  if(pe.p&&nk.length){h+='<div class="card"><div class="mealhd"><span class="mt">'+esc(pe.p.name)+' needs</span></div>';
+    nk.forEach(function(k){var miss=loc.eq.indexOf(k)<0;
+      h+='<div class="kv"><span>'+(miss?'<b class="eqmiss">'+esc(EQN[k])+'</b>':esc(EQN[k]))+'</span><span class="ls num">'+need[k].length+' exercise'+(need[k].length===1?'':'s')+(miss?' · swap them':'')+'</span></div>';});
+    h+='<div class="fnote">From this week’s sessions. Red is missing at '+esc(loc.name)+': tap Swap on that exercise in the workout.</div></div>';}
+  /* top exercises and the home gym planner, weighted by the sets you actually do */
+  var use=exUse(180),top=Object.keys(use).sort(function(a,b){return use[b]-use[a];}).slice(0,20);
+  if(top.length){var tot=0,by={},eqOf={};top.forEach(function(n){tot+=use[n];eqOf[n]=exInfoOf(n,EX_MUS[n]).eq;eqOf[n].forEach(function(k){if(k!=="bw")by[k]=(by[k]||0)+use[n];});});
+    h+='<div class="card eqbars"><div class="mealhd"><span class="mt">What your training uses</span><span class="mcal">last 6 months</span></div>';
+    Object.keys(by).sort(function(a,b){return by[b]-by[a];}).forEach(function(k){var pct=Math.round(by[k]/tot*100),miss=loc.eq.indexOf(k)<0,
+        unlock=top.filter(function(n){var e2=eqOf[n];return e2.indexOf(k)>=0&&missingAt(e2,loc).length===1;}).length;
+      h+='<div class="musr"><span class="mn">'+(miss?'<b class="eqmiss">'+esc(EQN[k])+'</b>':esc(EQN[k]))+'</span><span class="mbar"><i class="fill ok" style="width:'+pct+'%"></i></span><b class="num">'+pct+'%</b></div>'+
+        (miss&&unlock?'<div class="ls eqbuy">Not at '+esc(loc.name)+': it would cover '+unlock+' of your top '+top.length+' exercises</div>':'');});
+    h+='<div class="fnote">Share of your sets that need each piece, from your top '+top.length+' exercises. For a home gym, buy from the top down.</div></div>';
+    h+='<div class="card"><div class="mealhd"><span class="mt">Your top exercises</span></div><div class="wklist">';
+    top.slice(0,12).forEach(function(n){var x=exFind(n,EX_MUS[n]),eq2=eqOf[n];
+      h+='<button class="wkrow exrow" data-act="exinfo" data-n="'+esc(n)+'">'+exThumb(x)+'<span class="grow"><span class="ln">'+esc(n)+'</span><br><span class="ls">'+use[n]+' sets · '+eqText(eq2,loc)+'</span></span>'+IC("caretr")+'</button>';});
+    h+='</div></div>';}
+  var subs=DB.gym.subs||{},sk=Object.keys(subs);
+  h+='<div class="card"><div class="mealhd"><span class="mt">Swapped every time</span></div>'+(sk.length?sk.map(function(o){
+    return '<div class="kv"><span>'+esc(o)+'<br><span class="ls">now '+esc(subs[o])+'</span></span><button class="textbtn" data-act="subdel" data-n="'+esc(o)+'">Undo</button></div>';}).join(""):
+    '<div class="ls" style="margin-top:6px">None yet. In a workout, tap Swap on an exercise and turn on “Swap it every time”.</div>')+'</div>';
+  return h;}
+function locEditBody(){
+  var loc=curLoc(),h='<div class="flabel">Name</div><input id="locname" value="'+esc(loc.name)+'" maxlength="40">';
+  h+='<div class="flabel">Start from</div><div class="chips">'+LOC_PRESETS.map(function(p2,i){return '<button class="chip" data-act="locpreset" data-v="'+i+'">'+p2[0]+'</button>';}).join("")+'</div>';
+  h+='<div class="flabel">What it has</div><div class="eqgrid">'+EQUIP.map(function(q){var on=loc.eq.indexOf(q[0])>=0;
+    return '<button class="eqi'+(on?" on":"")+'" data-act="loceq" data-v="'+q[0]+'" aria-pressed="'+on+'">'+(on?IC("checkcf"):'<i class="eqo"></i>')+'<span>'+q[1]+'</span></button>';}).join("")+'</div>';
+  h+='<div class="fnote">Bodyweight exercises always count. Swaps and the library show what this place has.</div>';
+  if(locs().length>1)h+='<button class="bigbtn ghost danger" data-act="locdel" style="margin-top:12px">'+IC("trash")+'Remove '+esc(loc.name)+'</button>';
+  return h;}
 /* rest timer between sets */
 var GT={left:0,timer:null};
 function fmtRest(s){return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");}
@@ -1450,7 +1821,11 @@ function progLog(p,w,si,real){
   if(!ses)return null;
   var log={rid:null,prog:{pid:p.id,w:w,s:si},name:ses.name+" · Week "+(w+1),ex:[],t0:Date.now(),t1:0};
   var bumps=DB.gym.bump||{};
-  ses.ex.forEach(function(e){
+  var subs=DB.gym.subs||{};
+  ses.ex.forEach(function(e0){
+    /* "swap it every time": the same plan, the other exercise, no demo clip (it was for the old one) */
+    var e=e0;if(subs[e0.n]){e={};for(var k0 in e0)e[k0]=e0[k0];e.n=subs[e0.n];e.was=e0.n;var sx=exFind(e.n);if(sx)e.m=sx.m;
+      if(e0.st)e.st=e0.st.map(function(s2){var c={};for(var k in s2)if(k!=="v")c[k]=s2[k];c.n=e.n;return c;});}
     var last=lastSets(e.n),sets=[],rows=e.st?blockRows(e):[],bump=real&&bumps[e.n]||0;
     var lbOf=function(ls){return ls&&ls.lb>0?ls.lb+bump:0;};
     for(var g=1;g<=(e.sets||3);g++){
@@ -1467,6 +1842,7 @@ function progLog(p,w,si,real){
     }
     if(bump)delete bumps[e.n];
     var lx={n:e.n,m:e.m,sets:sets,target:e.target||"",rest:e.rest||0,notes:e.notes||""};
+    if(e.was)lx.was=e.was;
     if(e.st)lx.st=e.st;
     log.ex.push(lx);
   });
@@ -2169,7 +2545,7 @@ function plHead(log,ro){
     (n?'<div class="plseg">'+seg+'</div>':'');
 }
 function plMedia(log){
-  var sh=V.sheet,ex=!sh.list&&!sh.sum&&log.ex[sh.i],vids=ex?exVideos(ex):[],x=vids[Math.min(sh.vi||0,vids.length-1)];
+  var sh=V.sheet,ex=!sh.list&&!sh.sum&&!sh.swap&&log.ex[sh.i],vids=ex?exVideos(ex):[],x=vids[Math.min(sh.vi||0,vids.length-1)];
   if(!x)return '';
   return '<div class="plvid"><video src="/media/ex/'+x.v+'.mp4" poster="/media/ex/'+x.v+'.jpg" autoplay muted loop playsinline preload="auto"></video>'+
     '<button class="plexp" data-act="vid" data-v="'+x.v+'" data-n="'+esc(x.n)+'" aria-label="Open the video larger, with controls">'+IC("expand")+'</button>'+
@@ -2251,15 +2627,18 @@ function plMain(log,ro){
     return h+'<button class="bigbtn ghost" data-act="gymaddex">'+IC("plus")+'Add exercise</button>'+
       '<div class="fnote" style="text-align:center">'+gv.sets+' sets · '+fmtVol(gv.vol)+' lb so far</div>';
   }
+  if(sh.swap&&!ro&&log.ex[sh.i])return swapBody(log,log.ex[sh.i]);
   var ex=log.ex[sh.i];
   if(!ex)return '<div class="empty">'+(log.off?"Done outside the app, so there are no sets to show.":"No exercises in this workout yet.")+'</div>'+
     (ro||log.off?'':'<button class="bigbtn ghost" data-act="gymaddex">'+IC("plus")+'Add exercise</button>');
   var vids=exVideos(ex),meta=exMeta(ex),anyDone=log.ex.some(function(e){return e.sets.some(function(x){return x.done;});});
   if(!ro&&!log.t1)h+=checkinHtml(log,sh.ds,anyDone);
   if(vids.length>1)h+='<div class="plmv">'+vids.map(function(x,k){return '<button class="chip'+(k===(sh.vi||0)?" on":"")+'" data-act="plvid" data-vi="'+k+'">'+esc(x.n)+'</button>';}).join("")+'</div>';
-  h+='<div class="exhd" style="margin-top:16px"><div class="grow"><div class="plname">'+esc(ex.n)+'</div>'+
+  var canSwap=!ro&&!log.t1&&!ex.sets.some(function(x){return x.done;});
+  h+='<div class="exhd" style="margin-top:16px"><div class="grow"><button class="plname plinfo" data-act="exinfo" data-n="'+esc(ex.n)+'" data-m="'+esc(ex.m)+'"'+
+     (vids[0]?' data-v="'+vids[0].v+'"':'')+'>'+esc(ex.n)+'</button>'+(ex.was?'<div class="ls">Instead of '+esc(ex.was)+'</div>':'')+
      (meta?'<div class="extarget">'+esc(meta)+'</div>':'')+(ex.notes?'<div class="exnote">'+esc(ex.notes)+'</div>':'')+'</div>'+
-     '<span class="mtag">'+esc(ex.m)+'</span></div>';
+     '<span class="exhdr"><span class="mtag">'+esc(ex.m)+'</span>'+(canSwap?'<button class="textbtn exswap" data-act="swapopen">'+IC("swap")+'Swap</button>':'')+'</span></div>';
   h+=lastTimeLine(ex.n,ro?null:sh.ds,ro||log.t1?null:sh.i);
   /* a lone step with no cue says nothing the rows below don't */
   if(ex.st&&!(ex.st.length===1&&(ex.st[0].x||1)===1&&!ex.st[0].c))h+=stepsHtml(ex,true);
@@ -2286,6 +2665,7 @@ function plMenu(log,ro){
 function plFoot(log,ro){
   var sh=V.sheet,n=log.ex.length,i=sh.i,h='';
   if(sh.menu)return plMenu(log,ro);
+  if(sh.swap)return '<div class="plnav"><button class="bigbtn ghost" data-act="swapclose">Cancel</button></div>';
   if(sh.sum)return '<div class="plnav">'+(log.off?'':'<button class="bigbtn ghost" data-act="sumsets">See sets</button>')+'<button class="bigbtn" data-act="sumdone">Done</button></div>';
   if(ro)return '<div class="plnav"><button class="plprev" data-act="plgo" data-i="'+(i-1)+'"'+(i>0&&!sh.list?'':' disabled')+' aria-label="Previous exercise">'+IC("caretl")+'</button>'+
     '<button class="bigbtn" data-act="prevstart">'+IC("play")+'Start workout</button>'+
@@ -2639,6 +3019,11 @@ function agoText(t){var m=Math.round((Date.now()-t)/60000);return m<1?"just now"
 /* rough length: about 40 s a row plus the rest after each round */
 function estMin(ex){var t=0;(ex||[]).forEach(function(e){var rows=e.st?Math.max(1,blockRows(e).length):1,r=e.sets||3;t+=r*rows*40+r*(e.rest||90);});
   return Math.max(5,Math.round(t/300)*5);}
+/* the equipment a session needs (after swaps), with anything missing where you are */
+function sesNeeds(ex){var eq={},subs=DB.gym.subs||{},loc=curLoc();
+  ex.forEach(function(e){exInfoOf(subs[e.n]||e.n,subs[e.n]?null:e.m).eq.forEach(function(k){if(k!=="bw")eq[k]=1;});});
+  var ks=Object.keys(eq);if(!ks.length)return '';var miss=missingAt(ks,loc);
+  return '<div class="ls hneeds">Needs '+eqText(ks,loc)+'</div>'+(miss.length?'<div class="hwarn">Not at '+esc(loc.name)+': swap those exercises once you start</div>':'');}
 function sessionHero(eyebrow,ses,attrs,sub,extra){
   var ex=ses.ex||[],th='',seen={},nv=0;
   ex.forEach(function(e){var v=(exVideos(e)[0]||{}).v;if(v&&!seen[v]){seen[v]=1;
@@ -2647,7 +3032,7 @@ function sessionHero(eyebrow,ses,attrs,sub,extra){
   var rc=recovery(),sore=[];ex.forEach(function(e){var b=rc.by[e.m];if(b&&b.st==="hard"&&sore.indexOf(e.m)<0)sore.push(e.m);});
   return '<div class="card hero"><div class="eyebrow">'+esc(eyebrow)+'</div><div class="h1 hero-t">'+esc(ses.name)+'</div>'+
     '<div class="ls" style="margin-top:6px">'+(sub?esc(sub)+' · ':'')+ex.length+' exercise'+(ex.length===1?'':'s')+' · about '+estMin(ex)+' min</div>'+
-    (sore.length?'<div class="hwarn">Still recovering: '+esc(sore.join(", "))+'</div>':'')+
+    (sore.length?'<div class="hwarn">Still recovering: '+esc(sore.join(", "))+'</div>':'')+sesNeeds(ex)+
     (th?'<div class="hthumbs">'+th+'</div>':'')+
     '<button class="bigbtn" data-act="gymstart" data-d="'+todayStr()+'" '+attrs+'>'+IC("play")+'Start workout</button>'+(extra||'')+'</div>';
 }
@@ -2670,12 +3055,13 @@ function shortSes(n){return String(n||"").replace(/\s*\(.*\)\s*/g,"").replace(/\
 /* Train: Today (what to do now), Plan (program, routines, schedule), History (what's done) */
 function renderGym(){
   var g=DB.gym,today=todayStr(),wd=wdOf(today),tsub=V.trainSub||"today";
-  var h='<div class="wrap">'+topBar("Train")+segCtl("trainsub",tsub,[["today","Today"],["plan","Plan"],["history","History"]]);
+  var h='<div class="wrap">'+topBar("Train")+segCtl("trainsub",tsub,[["today","Today"],["plan","Plan"],["history","History"],["library","Library"]]);
   var rt=gymRoutineById(g.week[String(wd)]),ps=progState(),todays=logsOn(today);
   /* a workout still open (today's, or one that ran past midnight) */
   var openK=null;todays.concat(logsOn(dateAdd(today,-1))).forEach(function(k){if(!openK&&!g.logs[k].t1)openK=k;});
   var doneT=todays.filter(function(k){return g.logs[k].t1;}),pft=!todays.length&&planFor(today);
   if(tsub==="history"){h+=trainHistory();return h+'</div>';}
+  if(tsub==="library"){h+=libraryView();return h+'</div>';}
   if(tsub==="today"){
   /* 1. a workout in progress comes first */
   if(openK){var log=g.logs[openK],dnx=0,dset=0,tset=0;
@@ -2735,6 +3121,9 @@ function renderGym(){
   /* recovery, on the muscle map */
   if(finishedKeys().length)h+=bodyMapCard("rec");
   }else{
+  /* where you train and what the plan needs: swaps, equipment, what to buy */
+  h+='<button class="card instbar" data-act="equip">'+IC("gym")+'<span class="grow"><b>Equipment and swaps</b><br><span class="ls">'+esc(curLoc().name)+
+    ' · what the program needs, what to buy next</span></span>'+IC("caretr")+'</button>';
   /* 4. the program's week: tap any day to see it, then start it. Order is up to you. */
   if(ps&&!ps.complete){
     var vw=ps.up.w,vwk=ps.p.weeks[vw],vdone=0,tot=0,all=0;
@@ -3355,7 +3744,7 @@ function sheetBody(){
     k==="logrecipe"?logRecipeBody():k==="applyplan"?applyPlanBody():k==="cal"?calBody():
     k==="copy"?copyBody():k==="planview"?planViewBody():k==="planbuild"?planBuildBody():
     k==="pbpick"?pbPickBody():k==="clearplan"?clearPlanBody():
-    k==="progopts"?progOptsBody():k==="install"?installBody():k==="gymstats"?statsBody():k==="gymex"?exStatBody():k==="cardio"?cardioBody():k==="csvimp"?csvImpBody():k==="addprog"?addProgBody():k==="gympick"?gymPickBody():k==="gymroutine"?gymRoutineBody():
+    k==="progopts"?progOptsBody():k==="install"?installBody():k==="gymstats"?statsBody():k==="gymex"?exStatBody():k==="cardio"?cardioBody():k==="csvimp"?csvImpBody():k==="addprog"?addProgBody():k==="gympick"?gymPickBody():k==="exinfo"?exInfoBody():k==="equip"?equipBody():k==="locedit"?locEditBody():k==="gymroutine"?gymRoutineBody():
     k==="gymimport"?gymImportBody():k==="progview"?progViewBody():k==="progsched"?progSchedBody():"";
 }
 
@@ -3375,7 +3764,7 @@ function render(){
   if(V.sheet&&V.sheet.kind!=="gymlog"&&V.sheet.kind!=="gymprev"){
     var titles={progopts:"Program",install:"Use Fuel offline",gymstats:"Training stats",gymex:(V.sheet.n||"Exercise"),cardio:(V.sheet.k?"Cardio":V.sheet.live?"Save your session":"Cardio"),csvimp:"Import workouts",addprog:"Add a program",add:"Add to "+(V.sheet.target?MEALS[V.sheet.target.meal]||"recipe":""),entry:"Edit food",recipe:(V.sheet.editingId?"Edit recipe":"New recipe"),logrecipe:"Log recipe",applyplan:"Log full plan",cal:"Jump to a date",copy:"Copy a meal",
       planview:(planById(V.sheet.pid)||{}).name||"Plan",planbuild:(V.sheet.editingId?"Edit plan":"Create a meal plan"),pbpick:"Add to Day "+((V.sheet.dayIdx||0)+1),clearplan:"Remove plan foods",
-      gymlog:(DB.gym.logs[V.sheet.ds]||{}).name||"Workout",gympick:"Add exercise",gymroutine:(V.sheet.editingId?"Edit routine":"New routine"),
+      gymlog:(DB.gym.logs[V.sheet.ds]||{}).name||"Workout",exinfo:V.sheet.n||"Exercise",equip:"Equipment and swaps",locedit:"Edit "+curLoc().name,gympick:"Add exercise",gymroutine:(V.sheet.editingId?"Edit routine":"New routine"),
       gymimport:(V.sheet.stage==="reading"?"Importing":"Review program"),progview:(progById(V.sheet.pid)||{}).name||"Program",progsched:(V.sheet.s>=0?"Schedule a day":"Schedule a week")};
     h+=sheetHTML(sheetBody(),titles[V.sheet.kind]||"",sheetSizeClass());
   }
@@ -3462,6 +3851,7 @@ document.addEventListener("input",function(ev){
     var mc2=document.getElementById("maccalbtn");if(mc2)mc2.textContent=live.toLocaleString();
     return;
   }
+  if(ev.target.id==="libq"){LIBF.q=ev.target.value;LIBF.n=40;var lq=document.getElementById("liblist");if(lq)lq.innerHTML=libRows();return;}
   if(ev.target.id==="gpq"&&V.sheet&&V.sheet.kind==="gympick"){
     V.sheet.q=ev.target.value;
     var gval=ev.target.value;rerenderSheet();
@@ -3482,6 +3872,7 @@ document.addEventListener("change",function(ev){
   if(ev.target.classList&&ev.target.classList.contains("setin")&&ev.target.hasAttribute("data-f")){setInput(ev.target);return;}
   if(V.sheet&&V.sheet.kind==="cardio"&&/^cd(min|mi|hr|note)$/.test(ev.target.id)){cardioRead();rerenderSheet();return;}
   if(ev.target.id==="feelnote"&&V.sheet&&DB.gym.logs[V.sheet.ds]){var fn=DB.gym.logs[V.sheet.ds];if(!fn.feel)fn.feel={};fn.feel.note=ev.target.value.slice(0,500);save();return;}
+  if(ev.target.id==="locname"){var nm=ev.target.value.trim().slice(0,40);if(nm){curLoc().name=nm;save();}return;}
   if(ev.target.classList&&ev.target.classList.contains("remt")){var tk=ev.target.getAttribute("data-k"),tv=ev.target.value;
     if(/^\d{2}:\d{2}$/.test(tv)){remItem(tk).t=tv;save();}return;}
   if(ev.target.id==="pdfin"){var pf=ev.target.files&&ev.target.files[0];ev.target.value="";gymImport(pf);return;}
@@ -3851,6 +4242,30 @@ document.addEventListener("click",function(ev){
   else if(act==="ckoff"||act==="ckon"){DB.profile.noCheckin=act==="ckoff";V.sheet.menu=false;save();paintPlayer();
     showUndo(act==="ckoff"?"Won’t ask how you feel before workouts. Turn it back on from the ⋯ menu.":"Will ask how you feel before workouts",null);}
   else if(act==="remon"){remOn();}
+  else if(act==="libopen"){var lo=el.getAttribute("data-v");LIBF.open=LIBF.open===lo?"":lo;render();}
+  else if(act==="libset"){LIBF[el.getAttribute("data-k")]=el.getAttribute("data-v");LIBF.open="";LIBF.n=40;render();}
+  else if(act==="libsort"){LIBF.sort=LIBF.sort==="used"?"az":"used";render();}
+  else if(act==="libsave"){libSave();}
+  else if(act==="libmore"){LIBF.n+=60;var ll=document.getElementById("liblist");if(ll)ll.innerHTML=libRows();}
+  else if(act==="exinfo"){var inN=el.getAttribute("data-n"),back=V.sheet;
+    if(back&&back.kind==="exinfo"&&back.n===inN)return;
+    V.sheet={kind:"exinfo",n:inN,m:el.getAttribute("data-m")||"",v:el.getAttribute("data-v")||"",back:back};render();var sc=document.querySelector(".sheet .sbody,.sheet");if(sc)sc.scrollTop=0;}
+  else if(act==="expref"){var pg=DB.gym;if(!pg.pref)pg.pref={};var pvv=+el.getAttribute("data-v");if(pvv)pg.pref[V.sheet.n]=pvv;else delete pg.pref[V.sheet.n];save();rerenderSheet();}
+  else if(act==="equip"){V.sheet={kind:"equip",back:V.sheet&&V.sheet.kind!=="gymlog"?V.sheet:null};render();}
+  else if(act==="locpick"){DB.gym.loc=el.getAttribute("data-v");save();rerenderSheet();}
+  else if(act==="locadd"){var nl={id:"l"+Date.now().toString(36),name:"Home gym",eq:LOC_PRESETS[1][1].slice()};locs().push(nl);DB.gym.loc=nl.id;save();V.sheet={kind:"locedit",back:V.sheet};render();}
+  else if(act==="locedit"){V.sheet={kind:"locedit",back:V.sheet};render();}
+  else if(act==="loceq"){var lc=curLoc(),qk=el.getAttribute("data-v"),qi=lc.eq.indexOf(qk);if(qi>=0)lc.eq.splice(qi,1);else lc.eq.push(qk);save();rerenderSheet();}
+  else if(act==="locpreset"){var lp=LOC_PRESETS[+el.getAttribute("data-v")];curLoc().eq=lp[1].slice();save();rerenderSheet();}
+  else if(act==="locdel"){var ld=curLoc();if(locs().length>1&&confirm("Remove "+ld.name+"?")){DB.gym.locs=locs().filter(function(l){return l!==ld;});DB.gym.loc=DB.gym.locs[0].id;save();closeSheet();}}
+  else if(act==="swapopen"){V.sheet.swap=true;V.sheet.swapAll=false;V.sheet.swapEvery=false;if(!EXDB)loadEXDB();paintPlayer();var ps2=document.getElementById("plsc");if(ps2)ps2.scrollTop=0;}
+  else if(act==="swapclose"){V.sheet.swap=false;paintPlayer();}
+  else if(act==="swapall"){V.sheet.swapAll=!V.sheet.swapAll;paintPlayer();}
+  else if(act==="swapalways"){V.sheet.swapEvery=!V.sheet.swapEvery;paintPlayer();}
+  else if(act==="swapdo"){var sL=DB.gym.logs[V.sheet.ds],so=(V.sheet.swapC||[])[+el.getAttribute("data-i")];
+    if(sL&&so){var oldN=sL.ex[V.sheet.i].n,ev2=V.sheet.swapEvery;doSwap(sL,V.sheet.i,so.x,ev2);V.sheet.swap=false;save();paintPlayer();
+      showUndo("Swapped "+oldN+" for "+so.x.n+(ev2?", every time":""),null);}}
+  else if(act==="subdel"){var sdn=el.getAttribute("data-n");if(DB.gym.subs){delete DB.gym.subs[sdn];save();rerenderSheet();}}
   else if(act==="remtog"){var rk=el.getAttribute("data-k"),ri=remItem(rk);ri.on=!ri.on;save();render();}
   else if(act==="remopen"){var rp=remPlan();rp.open=rp.open===false;save();render();}
   else if(act==="remday"){var rd=remItem("w").d,dn=+el.getAttribute("data-d"),di=rd.indexOf(dn);if(di>=0){if(rd.length>1)rd.splice(di,1);}else rd.push(dn);rd.sort();save();render();}
@@ -3867,7 +4282,7 @@ document.addEventListener("click",function(ev){
   else if(act==="strange"||act==="stmetric"||act==="stallex"){var sst=statsState();
     if(act==="strange")sst.r=el.getAttribute("data-v");else if(act==="stmetric")sst.m=el.getAttribute("data-v");else sst.allex=true;
     if(V.sheet&&V.sheet.kind==="gymstats")rerenderSheet();else render();}
-  else if(act==="stex"){V.sheet={kind:"gymex",n:el.getAttribute("data-n"),m:"e1",back:V.sheet&&V.sheet.kind==="gymstats"?V.sheet:null};render();}
+  else if(act==="stex"){V.sheet={kind:"gymex",n:el.getAttribute("data-n"),m:"e1",back:V.sheet&&(V.sheet.kind==="gymstats"||V.sheet.kind==="exinfo")?V.sheet:null};render();}
   else if(act==="exmetric"){V.sheet.m=el.getAttribute("data-v");rerenderSheet();}
   else if(act==="vsave"){if(V.sheet&&V.sheet.kind==="progopts")V.sheet=null;saveVideos();}
   else if(act==="vdrop"){if(confirm("Remove the saved videos from this phone? You can save them again any time."))dropVideos();}

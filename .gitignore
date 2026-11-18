@@ -19,3 +19,6 @@ node_modules
 # Exercise demo clips: licensed for personal use, never committed. They live only on the
 # machine that deploys (see docs/ARCHITECTURE.md, "Exercise videos").
 public/media/
+
+# Exercise library photos (public domain, from free-exercise-db): rebuilt by scripts/build-library.mjs
+public/lib/

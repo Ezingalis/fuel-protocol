@@ -290,6 +290,12 @@ pain 1-3, note) and next-time weight bumps (`gym.bump[exercise]`).
   service hosts can subscribe. The key lives in the `VAPID_JWK` secret, made by
   `scripts/vapid-key.mjs` piped straight into `wrangler secret put`. Turned on per phone in Settings
   (iOS needs the Home Screen app and asks inside the tap).
+- **Food and weigh-in reminders**: Settings → Reminders keeps `profile.rem` (weigh-in time and days,
+  breakfast / lunch / snacks / dinner times, and the workout-left-open switch) plus the phone's time
+  zone (`profile.tz`). Each sync copies it to `push_plan`; the same 2-minute cron works out each
+  person's local time (`localNow`), sends what's come up within the last 90 minutes once a day
+  (`push_plan.sent`), and skips a weigh-in or meal already logged that day (`alreadyLogged`). Every
+  send writes `push_msg` (title, text, where a tap goes) for the service worker to read.
 - **CSV**: export is one row per set (and per cardio session). Import reads Hevy's or Strong's export,
   converts kg, groups rows back into workouts, skips anything already imported (`log.imp`), and goes
   through `gymChange` so one undo removes it.
@@ -312,3 +318,39 @@ screen (`paintResume`). In the workout: Finish top right, the title toggles the 
 before reps, "Use these" copies last time's numbers, rest has −15 / +15 / Skip with a draining
 line, the demo shrinks once the exercise is under way, and a sideways swipe moves between
 exercises. Effort is asked once per round, after its last row.
+
+## Exercise library, equipment and swaps
+
+- **Library** (`public/exercises.json`, built by `scripts/build-library.mjs` from
+  [free-exercise-db](https://github.com/yuhonas/free-exercise-db), public domain): 876 exercises,
+  each with steps, main and helper muscles, level, force and mechanic, and two photos (start, end)
+  resized into `public/lib/<id>/0.jpg|1.jpg`. The photos are gitignored like the demo clips and
+  rebuilt by the script; the page plays them as a loop (`exAnim`). The service worker keeps every
+  photo it serves in `fuel-lib` (kept across updates), and Library → "Photos with no Wi-Fi" saves all
+  of them (about 25 MB).
+- **Equipment and movement** aren't stored: `exEquip` reads 27 kinds of equipment (dumbbells, barbell,
+  squat rack, benches, cable, Smith, leg press, machines, pull-up bar, bands, and so on) from the name
+  and the dataset's equipment field, and `exPattern` reads a movement (push / pull by plane, squat,
+  hinge, lunge, curl, fly, raise...). The same functions read program exercises, so the two compare.
+  `exInfoOf` matches a program name to the library (`exClean` drops cues like "Fixed Elbow" and
+  "+ 2 more"; `exFind` scores shared words, the same movement, and equipment the name didn't ask
+  for). Equipment named in the program wins; a close match adds what goes with it; a loose match
+  lends photos but not equipment; no match and no equipment word means unknown, not bodyweight.
+- **Train → Library**: search plus Muscle / Equipment (default: what this place has) / Movement /
+  Level filters and A-to-Z or most done. An exercise page has the photo loop (or the program's demo
+  clip when it's from a program), what it needs (missing items in red), a muscle map of main and
+  helper muscles, steps, your history, "Suggest it" (more often / less often / never, in
+  `gym.pref`), and similar exercises.
+- **Places** (`gym.locs`, `gym.loc`; Fitbod calls them Locations): each has its equipment, with
+  presets (full, home, garage, bodyweight). Library filters and swaps follow the current place.
+- **Swaps** (`swapCands`, Fitbod-style): always the same main muscle; then the same movement, what
+  you've swapped to before (`gym.swaps`), what you've done, your more / less preferences, the same
+  mechanic, shared equipment; never-suggest is out, and only what this place has unless you ask.
+  In a workout, Swap (before the first set of that exercise) replaces it, fills weights from your
+  last time with the new one, keeps the round structure, and drops the old demo clip. "Swap it every
+  time" stores `gym.subs`, which program days use from then on (`progLog`), shown as "Instead of".
+- **Equipment and swaps** (Train → Plan or Library): where you train, what the program needs this
+  week (missing in red), what your training uses (share of the last 6 months' sets from your top 20
+  exercises, and for each missing piece how many of them it would cover: the home gym shopping list),
+  your top exercises, and the every-time swaps with Undo. Session cards list what they need.
+
