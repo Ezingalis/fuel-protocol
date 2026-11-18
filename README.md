@@ -23,6 +23,7 @@ A personal nutrition diary — MyFitnessPal-style — built as one HTML file plu
 - **Recipes** — build once from ingredients, auto per-serving macros, log by the serving
 - **Plans** — plan tiles with computed profiles (cal/day, protein level, tuned-to bodyweight), plain-English review against your own TDEE, a builder that copies meals/foods from logged diary days, clean remove-plan-from-calendar with undo, share/import via 8-character code
 - **Workouts** — routines per weekday over a 876-exercise library (public-domain [free-exercise-db](https://github.com/yuhonas/free-exercise-db)), guided sessions with weights pre-filled from last time, rest timer, set ticking, PR detection, 7-day muscle coverage; multi-week **programs imported from PDF** (AI reads every week's sets, %1RM, RPE, rest) with redo / skip / jump / end week controls; exercise demo videos (tap a thumbnail; signed-in only) with drop-set, cluster, and superset steps
+- **Training** — Hevy-style summaries, records, and stats; effort per set; a muscle map of recovery and weekly sets (artwork: [MuscleMap](https://github.com/melihcolpan/MuscleMap) by Melih Colpan, MIT); a pre-workout check-in that suggests going lighter or doing less; workout time that ends at your last entry when you forget to finish, editable after; an optional notification when a workout has been open an hour with nothing logged for 10 minutes
 - **Installable + offline**: a guided Add to Home Screen, sign-in by emailed 6-digit code (works inside the Home Screen app), and program demo videos saved to the phone; it opens, logs, and plays saved videos with no connection, and syncs when you're back
 - **Progress** — 14-day calorie chart vs target, weight trend from timestamped weigh-ins (multiple per day), averages, strength PRs
 - **Settings** — Mifflin-St Jeor BMR/TDEE, goal-rate → auto calorie target or custom, macro targets by grams or percent, export/import
@@ -45,5 +46,6 @@ Set as Cloudflare Worker secrets, never committed:
 | `RESEND_KEY` | Sends sign-in emails |
 | `MAIL_FROM` | Verified sender address |
 | `FS_KEY` / `FS_SECRET` | FatSecret API. Without them, search and barcode run entirely on Open Food Facts. |
+| `VAPID_JWK` | Signs workout reminder notifications. Make it with `node scripts/vapid-key.mjs \| npx wrangler secret put VAPID_JWK`. Without it, reminders stay off. |
 
 `ALLOW_DEV_LINK=1` shows sign-in links on screen when email isn't configured — for first-run testing only, remove it before other people use the app.

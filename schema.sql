@@ -68,3 +68,23 @@ CREATE TABLE IF NOT EXISTS code_tries (
   token_hash  TEXT PRIMARY KEY,
   n           INTEGER NOT NULL
 );
+
+-- Workout reminders (push.js): the devices that turned them on...
+CREATE TABLE IF NOT EXISTS push_subs (
+  endpoint    TEXT PRIMARY KEY,
+  uid         TEXT NOT NULL,
+  created     INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_push_subs_uid ON push_subs(uid);
+
+-- ...and, per person, the open workout and when its reminder is due (rewritten on every sync)
+CREATE TABLE IF NOT EXISTS push_due (
+  uid         TEXT NOT NULL,
+  k           TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  t0          INTEGER NOT NULL,
+  due         INTEGER NOT NULL,
+  sent        INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (uid, k)
+);
+CREATE INDEX IF NOT EXISTS idx_push_due_due ON push_due(sent, due);

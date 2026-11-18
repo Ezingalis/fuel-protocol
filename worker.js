@@ -10,10 +10,15 @@
                                      reads a workout PDF into routines (signed-in, rate-limited)
      POST /api/auth/code          -> { ok } + cookie    sign in with the 6-digit code from the email
      GET  /media/ex/<id>.mp4|jpg  -> exercise demo clip (signed-in, byte ranges)
-   Secrets (set in Cloudflare, never in code): FS_KEY, FS_SECRET, ANTHROPIC_API_KEY
+     GET  /api/push/key           -> { key }            public VAPID key for workout reminders
+     POST /api/push/sub|unsub     -> { ok }             this device does / doesn't get reminders (signed-in)
+     GET  /api/push/pending       -> { name, min }      what a reminder says (the service worker asks)
+   Cron (every 2 min): workout reminders, see push.js
+   Secrets (set in Cloudflare, never in code): FS_KEY, FS_SECRET, ANTHROPIC_API_KEY, VAPID_JWK
 */
 import Anthropic, { toFile } from "@anthropic-ai/sdk";
 import { PROGRAM_SCHEMA, IMPORT_PROMPT, WORKERS_AI_NOTE, importError, cleanProgram } from "./program.js";
+import { okEndpoint, syncDue, saveSub, pending, vapidPublic, runReminders } from "./push.js";
 
 const FS_URL = "https://platform.fatsecret.com/rest/server.api";
 
@@ -553,9 +558,25 @@ async function authRoute(url, request, env, ctx) {
         "INSERT INTO state (user_id,json,updated_at) VALUES (?1,?2,?3) " +
         "ON CONFLICT(user_id) DO UPDATE SET json=excluded.json, updated_at=excluded.updated_at"
       ).bind(uid, text, at).run();
+      /* an open workout's reminder time follows every save; a reminder problem never fails the save */
+      try { await syncDue(db, uid, body.state); } catch (e) {}
       return json({ ok: true, updatedAt: at });
     }
     return json({ error: "method" }, 405);
+  }
+
+  if (path === "/api/push/key") return json({ key: vapidPublic(env) });
+  if (path === "/api/push/sub" || path === "/api/push/unsub" || path === "/api/push/pending") {
+    const uid = await readSession(env, request);
+    if (!uid || !db) return json({ error: "signed_out" }, 401);
+    if (path === "/api/push/pending") return json(await pending(db, uid), 200, { "Cache-Control": "no-store" });
+    if (request.method !== "POST") return json({ error: "method" }, 405);
+    let body = {};
+    try { body = await request.json(); } catch (e) { return json({ error: "bad_body" }, 400); }
+    if (!okEndpoint(env, body.endpoint)) return json({ error: "bad_endpoint" }, 400);
+    if (path === "/api/push/sub") await saveSub(db, uid, body.endpoint);
+    else await db.prepare("DELETE FROM push_subs WHERE endpoint=?1 AND uid=?2").bind(body.endpoint, uid).run();
+    return json({ ok: true });
   }
 
   if (path === "/api/plan/share" && request.method === "POST") {
@@ -719,5 +740,8 @@ export default {
       catch (e) { return json({ error: "server_error" }, 500); }
     }
     return env.ASSETS.fetch(request);
+  },
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runReminders(env));
   }
 };

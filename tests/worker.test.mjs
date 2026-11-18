@@ -25,7 +25,7 @@ const EMAIL = `test-${Date.now()}@example.com`;
 /* Stand-in for api.anthropic.com so the Claude import path runs end to end
    (Files upload -> streamed Messages call -> file delete) without a real key.
    `MOCK.mode` picks the canned reply for the next Messages call. */
-const MOCK = { mode: "program", uploads: [], messages: [], deletes: [], mail: [] };
+const MOCK = { mode: "program", uploads: [], messages: [], deletes: [], mail: [], push: [] };
 const ex = (o) => Object.assign({ muscle: "chest", sets: 3, reps: 8, target: "", lb: 0, rest_sec: 120, notes: "" }, o);
 const MOCK_PROGRAM = {
   program: "Test Block Program", notes: "Two days a week; loads by %1RM.", total_weeks: 5,
@@ -62,6 +62,10 @@ function startMock() {
     req.on("end", () => {
       const body = Buffer.concat(chunks);
       const path = req.url.split("?")[0];
+      if (req.method === "POST" && path.startsWith("/push/")) {   // stand-in for Apple's push service
+        MOCK.push.push({ path, auth: req.headers.authorization || "", ttl: req.headers.ttl, len: body.length });
+        res.writeHead(path === "/push/gone" ? 410 : 201); return res.end();
+      }
       if (req.method === "POST" && path === "/emails") {          // stand-in for Resend
         MOCK.mail.push(JSON.parse(body.toString()));
         res.writeHead(200, { "content-type": "application/json" });
@@ -94,7 +98,12 @@ function startMock() {
 const CLIP = "TestClipZz0001", CLIP_BYTES = Buffer.from(Array.from({ length: 1000 }, (_, i) => i % 256));
 const clipPath = () => join(root, "public", "media", "ex", CLIP + ".mp4");
 
+/* a throwaway signing key for workout reminders (the real one only ever lives in Cloudflare) */
+let VAPID;
 before(async () => {
+  const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+  const j = await crypto.subtle.exportKey("jwk", pair.privateKey);
+  VAPID = JSON.stringify({ kty: j.kty, crv: j.crv, x: j.x, y: j.y, d: j.d });
   mkdirSync(dirname(clipPath()), { recursive: true });
   writeFileSync(clipPath(), CLIP_BYTES);
   execSync("npx wrangler d1 execute fuel-protocol-db --local --file=./schema.sql", {
@@ -106,6 +115,7 @@ before(async () => {
     "--var", "RESEND_KEY:test", "--var", `RESEND_BASE_URL:http://127.0.0.1:${MOCK_PORT}`,
     "--var", `OWNER_EMAIL:${EMAIL}`,
     "--var", "IMPORTS_PER_DAY:10", "--var", "APPROVALS_PER_DAY:1000",
+    "--var", `VAPID_JWK:${VAPID}`, "--var", "PUSH_ALLOW_LOCAL:1", "--test-scheduled",
     "--var", `ANTHROPIC_BASE_URL:http://127.0.0.1:${MOCK_PORT}`], {
     cwd: root, stdio: "pipe", detached: true
   });
@@ -518,3 +528,83 @@ test("logout: clears the cookie", async () => {
   assert.equal((await r.json()).ok, true);
   assert.match(r.headers.get("set-cookie"), /Max-Age=0/);
 });
+
+/* ---------- workout reminders ---------- */
+
+const post = (path, body, c = cookie) => fetch(BASE + path, {
+  method: "POST", headers: { "Content-Type": "application/json", Cookie: c }, body: JSON.stringify(body) });
+const putState = (logs) => fetch(`${BASE}/api/state`, {
+  method: "PUT", headers: { "Content-Type": "application/json", Cookie: cookie },
+  body: JSON.stringify({ state: { gym: { logs } }, updatedAt: Date.now() }) });
+const unb64u = s => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), c => c.charCodeAt(0));
+async function runCron() {
+  const before = MOCK.push.length;
+  const r = await fetch(`${BASE}/__scheduled?cron=*/2+*+*+*+*`);
+  assert.equal(r.status, 200);
+  for (let i = 0; i < 20 && MOCK.push.length === before; i++) await new Promise(res => setTimeout(res, 100));
+  return MOCK.push.length - before;
+}
+const MIN = 60000, DEV1 = `http://127.0.0.1:${MOCK_PORT}/push/dev1`;
+
+test("push: the public key comes from the secret and is a P-256 point", async () => {
+  const { key } = await (await fetch(`${BASE}/api/push/key`)).json();
+  const raw = unb64u(key);
+  assert.equal(raw.length, 65);
+  assert.equal(raw[0], 4);
+});
+
+test("push: only signed-in people, and only real push services, can subscribe", async () => {
+  assert.equal((await post("/api/push/sub", { endpoint: DEV1 }, "")).status, 401);
+  assert.equal((await post("/api/push/sub", { endpoint: "https://evil.example.com/x" })).status, 400);
+  assert.equal((await post("/api/push/sub", { endpoint: "https://web.push.apple.com.evil.com/x" })).status, 400);
+  assert.equal((await post("/api/push/sub", {})).status, 400);
+  assert.deepEqual(await (await post("/api/push/sub", { endpoint: DEV1 })).json(), { ok: true });
+});
+
+test("push: open an hour with 10 quiet minutes sends one signed reminder that says which workout", async () => {
+  const now = Date.now();
+  assert.equal((await putState({ "2026-11-17": { name: "Push A", t0: now - 65 * MIN, ta: now - 12 * MIN, t1: 0, ex: [] } })).status, 200);
+  assert.equal(await runCron(), 1);
+  const hit = MOCK.push.at(-1);
+  assert.equal(hit.path, "/push/dev1");
+  assert.equal(hit.len, 0, "no payload, so nothing to encrypt");
+  assert.ok(Number(hit.ttl) > 0);
+  const m = hit.auth.match(/^vapid t=([\w-]+)\.([\w-]+)\.([\w-]+), k=([\w-]+)$/);
+  assert.ok(m, "VAPID header: " + hit.auth);
+  const claims = JSON.parse(new TextDecoder().decode(unb64u(m[2])));
+  assert.equal(claims.aud, `http://127.0.0.1:${MOCK_PORT}`);
+  assert.ok(claims.exp * 1000 > now && claims.exp * 1000 < now + 24 * 36e5);
+  assert.match(claims.sub, /^https:/);
+  const pub = await crypto.subtle.importKey("raw", unb64u(m[4]), { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+  assert.ok(await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, pub, unb64u(m[3]), new TextEncoder().encode(m[1] + "." + m[2])),
+    "the JWT is signed by the key the browser subscribed with");
+  const pend = await (await fetch(`${BASE}/api/push/pending`, { headers: { Cookie: cookie } })).json();
+  assert.equal(pend.name, "Push A");
+  assert.ok(pend.min >= 65 && pend.min <= 66);
+  assert.equal(await runCron(), 0, "once per quiet spell");
+});
+
+test("push: logging again re-arms it; under an hour, or finished, nothing goes out", async () => {
+  const now = Date.now();
+  await putState({ "2026-11-17": { name: "Push A", t0: now - 70 * MIN, ta: now - 11 * MIN, t1: 0, ex: [] } });
+  assert.equal(await runCron(), 1, "new entry, then quiet again: one more");
+  await putState({ "2026-11-18": { name: "Legs", t0: now - 30 * MIN, ta: now - 20 * MIN, t1: 0, ex: [] } });
+  assert.equal(await runCron(), 0, "not open an hour yet");
+  await putState({ "2026-11-18": { name: "Legs", t0: now - 90 * MIN, ta: now - 3 * MIN, t1: 0, ex: [] } });
+  assert.equal(await runCron(), 0, "still logging");
+  await putState({ "2026-11-18": { name: "Legs", t0: now - 90 * MIN, ta: now - 30 * MIN, t1: now - 29 * MIN, ex: [] },
+    "2026-11-18~2": { name: "Run", t0: now - 90 * MIN, t1: 0, cardio: { type: "run" } } });
+  assert.equal(await runCron(), 0, "finished workouts and cardio timers never remind");
+  assert.deepEqual(await (await fetch(`${BASE}/api/push/pending`, { headers: { Cookie: cookie } })).json(), {});
+});
+
+test("push: a device the push service says is gone is forgotten; unsubscribing works", async () => {
+  const GONE = `http://127.0.0.1:${MOCK_PORT}/push/gone`;
+  await post("/api/push/sub", { endpoint: GONE });
+  await putState({ "2026-11-19": { name: "Pull", t0: Date.now() - 80 * MIN, t1: 0, ex: [] } });
+  assert.equal(await runCron(), 2, "both devices tried");
+  await putState({ "2026-11-19": { name: "Pull", t0: Date.now() - 80 * MIN, ta: Date.now() - 15 * MIN, t1: 0, ex: [] } });
+  await post("/api/push/unsub", { endpoint: DEV1 });
+  assert.equal(await runCron(), 0, "gone device dropped, the other unsubscribed");
+});
+

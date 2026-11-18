@@ -28,6 +28,8 @@
       "database_id": "df9facb0-8cb5-4588-9e21-2cb7c2d3ea52"
     }
   ],
+  // workout reminders: sends any that are due (push.js)
+  "triggers": { "crons": ["*/2 * * * *"] },
   "observability": {
     "enabled": true
   }

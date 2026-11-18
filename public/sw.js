@@ -79,3 +79,30 @@ async function sliced(res, range) {
     "Accept-Ranges": "bytes"
   } });
 }
+
+/* workout reminders (see push.js): the push carries no message, so ask the server what to say */
+self.addEventListener("push", (e) => {
+  e.waitUntil((async () => {
+    let body = "Your workout has been open over an hour with nothing logged for 10 minutes. Tap to finish it.";
+    try {
+      const r = await fetch("/api/push/pending", { credentials: "same-origin", cache: "no-store" });
+      const d = r.ok ? await r.json() : {};
+      if (d.name) body = d.name + " has been open " + (d.min < 90 ? d.min + " min" : Math.floor(d.min / 60) + " h " + (d.min % 60) + " min") +
+        " and nothing was logged for 10 minutes. Tap to finish it.";
+    } catch (err) { /* the general message is fine */ }
+    await self.registration.showNotification("Still working out?", {
+      body, tag: "workout", renotify: true, icon: "/icons/icon-192.png", data: { url: "/?open=workout" }
+    });
+  })());
+});
+
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  e.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const w of wins) {
+      if (new URL(w.url).origin === self.location.origin) { w.postMessage({ open: "workout" }); return w.focus(); }
+    }
+    return self.clients.openWindow("/?open=workout");
+  })());
+});

@@ -351,7 +351,7 @@ test("offline: install guide, code sign-in for the Home Screen app, saved clips 
 
 test("offline: the service worker cuts a saved clip to the byte range the player asks for", async () => {
   const sw = read("public/sw.js");
-  const sliced = new Function(sw.slice(sw.indexOf("async function sliced")) + "; return sliced;")();
+  const sliced = new Function(sw.slice(sw.indexOf("async function sliced"), sw.indexOf("/* workout reminders")) + "; return sliced;")();
   const clip = () => new Response(new Uint8Array(Array.from({ length: 100 }, (_, i) => i)), { headers: { "Content-Type": "video/mp4" } });
   const a = await sliced(clip(), "bytes=10-19");
   assert.equal(a.status, 206);
@@ -526,8 +526,8 @@ test("programs: week controls exist and every move is undoable", () => {
   assert.ok(html.includes("programs:[],active:null"), "program state missing from freshDB");
 });
 
-test("schema: defines the seven tables", () => {
-  for (const t of ["users", "state", "magic_links", "shared_plans", "gym_imports", "approvals", "code_tries"]) {
+test("schema: defines the nine tables", () => {
+  for (const t of ["users", "state", "magic_links", "shared_plans", "gym_imports", "approvals", "code_tries", "push_subs", "push_due"]) {
     assert.match(schema, new RegExp(`CREATE TABLE IF NOT EXISTS ${t}`), `missing table ${t}`);
   }
 });
@@ -581,4 +581,109 @@ test("hygiene: gitignore shields secrets and local state", () => {
   for (const entry of [".dev.vars", "node_modules", ".wrangler"]) {
     assert.ok(gitignore.includes(entry), `.gitignore missing ${entry}`);
   }
+});
+
+/* ---------- muscle map, check-in, workout time, reminders ---------- */
+
+const fnFrom = (start, end, ret, args = [], vals = []) =>
+  new Function(...args, html.slice(html.indexOf(start), html.indexOf(end)) + "; return " + ret + ";")(...vals);
+
+test("muscle map: MuscleMap artwork, credited under its MIT license, draws every tracked muscle", () => {
+  assert.ok(html.includes("MuscleMap by Melih Colpan") && html.includes("Permission is hereby granted, free of charge"), "MIT notice kept with the artwork");
+  const m = fnFrom("var MM_FRONT=", "function bodyMapSvg(", "{MM_FRONT,MM_BACK}");
+  const drawn = new Set([...m.MM_FRONT, ...m.MM_BACK].map(x => x[0]));
+  const MAIN = fnFrom("var MAIN_MUSCLES=", "function recovery(", "MAIN_MUSCLES");
+  for (const mu of MAIN) assert.ok(drawn.has(mu), `no shape for ${mu}`);
+  assert.ok(m.MM_FRONT.some(x => x[0] === "chest") && m.MM_BACK.some(x => x[0] === "lats"), "chest in front, lats behind");
+  const svg = fnFrom("var MM_FRONT=", "/* the map as a card", "bodyMapSvg")({ chest: "hard" }, "chest");
+  assert.match(svg, /class="mu hard sel" data-act="bmsel" data-m="chest"/);
+  assert.match(svg, /class="mu idle" data-act="bmsel" data-m="lats"/);
+});
+
+test("muscle map: recovery gives each muscle a state and how long until it's ready", () => {
+  const now = Date.now(), sets = n => Array.from({ length: n }, () => ({ done: true }));
+  const DB = { gym: { logs: {
+    a: { t0: now - 13 * 36e5, t1: now - 12 * 36e5, ex: [{ n: "Cable Fly", m: "chest", sets: sets(8) }] },
+    b: { t0: now - 51 * 36e5, t1: now - 50 * 36e5, ex: [{ n: "Leg Extension", m: "quadriceps", sets: sets(4) }] } } } };
+  const src = html.slice(html.indexOf("function workSets("), html.indexOf("function finishedKeys(")) +
+    html.slice(html.indexOf("/* The main muscle gets a full set"), html.indexOf("function ymdOf("));
+  const rec = new Function("DB", src + "; return recovery;")(DB)();
+  assert.equal(rec.by.chest.st, "hard", "8 sets 12 h ago is still a lot");
+  assert.ok(Math.abs(rec.by.chest.eta - 36 * Math.log2(8 * Math.pow(0.5, 12 / 36) / 2)) < 0.01);
+  assert.equal(rec.by.quadriceps.st, "ready", "4 sets fade below 2 after 50 h (legs halve every 48 h)");
+  assert.equal(rec.by.lats.st, "idle");
+  assert.ok(rec.hard.includes("chest") && rec.idle.includes("lats"));
+});
+
+test("check-in: lighter rounds to real plates, one set less comes off the last round and goes back", () => {
+  const f = fnFrom("/* ---------------- readiness check-in", "function ckChanged(",
+    "{setLighter,setFewer,roundsOf,canFewer,ckAdvice}", ["recovery"], [() => ({ by: { chest: { st: "hard" } } })]);
+  const plain = n => Array.from({ length: n }, () => ({ lb: 185, reps: 8, done: false }));
+  const L = { ex: [
+    { n: "Bench", m: "chest", sets: plain(4) },
+    { n: "Fly", m: "chest", sets: [1, 1, 2, 2, 3, 3].map((g, i) => ({ g, p: i % 2, lb: 20, reps: 10, done: false })) },
+    { n: "Curl", m: "biceps", sets: plain(2) }] };
+  f.setLighter(L, true);
+  assert.deepEqual([L.ex[0].sets[0].lb, L.ex[0].sets[0].lb0, L.ex[1].sets[0].lb], [165, 185, 17.5], "5 lb steps on a bar, 2.5 on light weights");
+  f.setFewer(L, true);
+  assert.deepEqual(L.ex.map(e => e.sets.length), [3, 4, 2], "a round of a drop set goes whole; two-set exercises stay");
+  f.setFewer(L, false); f.setLighter(L, false);
+  assert.deepEqual(L.ex.map(e => e.sets.length), [4, 6, 2]);
+  assert.deepEqual(L.ex[1].sets.map(x => x.g), [1, 1, 2, 2, 3, 3]);
+  assert.equal(L.ex[0].sets[0].lb, 185);
+  assert.equal(L.lighter, false);
+  assert.equal(L.fewer, undefined);
+  assert.equal(f.ckAdvice(L, { s: 1, so: 1, e: 1 }).lvl, 2, "slept poorly, very sore, low energy");
+  assert.equal(f.ckAdvice(L, { s: 3, so: 3, e: 3 }).lvl, 0);
+  assert.equal(f.ckAdvice(L, { s: 3, so: 2, e: 2 }).lvl, 1, "fine but chest is still fatigued: take it easier");
+  assert.deepEqual(f.ckAdvice(L, { s: 3, so: 3, e: 3 }).tired, ["chest"]);
+  for (const a of ["ck", "ckskip", "ckredo", "ckgo", "ckundo", "ckoff", "ckon"]) assert.ok(html.includes(`act==="${a}"`), `missing ${a}`);
+});
+
+test("check-in: a lighter day doesn't lower next time or earn a bump", () => {
+  const DB = { gym: { logs: { "2026-11-16": { lighter: true, t1: 1, ex: [{ n: "Bench", sets: [{ lb: 165, lb0: 185, reps: 8, done: true }] }] } } } };
+  const lastSets = new Function("DB", html.slice(html.indexOf("function lastSets("), html.indexOf("function gymVol(")) + "; return lastSets;")(DB);
+  assert.equal(lastSets("Bench")[0].lb, 185);
+  assert.ok(html.includes("if(f.effort===5||f.pain===2||L.lighter||L.fewer)return out;"));
+});
+
+test("workout time: 10 quiet minutes before Finish ends it at the last entry; the time can be edited", () => {
+  const end = fnFrom("var IDLE_MS=", "function finishWorkout(", "workoutEnd");
+  const M = 60000;
+  assert.equal(end({ t0: 0, ta: 50 * M }, 75 * M), 51 * M, "25 quiet minutes: ends a minute after the last entry");
+  assert.equal(end({ t0: 0, ta: 70 * M }, 75 * M), 75 * M, "5 quiet minutes: ends now");
+  assert.equal(end({ t0: 0 }, 500 * M), 500 * M, "no entry time (older workouts): ends now");
+  assert.ok(html.includes("wl.ta=DB.updatedAt"), "every save in an open workout records the entry time");
+  assert.ok(html.includes("setInterval(autoFinishStale,60000)") && html.includes("STALE_MS=3*36e5"), "left open 3 h, it finishes itself");
+  for (const a of ["duredit", "durset", "dursave"]) assert.ok(html.includes(`act==="${a}"`), `missing ${a}`);
+  assert.ok(html.includes('sumTile("Time",st.min+" min",pv&&pv.min,st.min,"duredit")'), "tap Time on the summary to change it");
+});
+
+test("reminders: due an hour in, after 10 quiet minutes; only the newest open workout counts", async () => {
+  const { openWorkout, okEndpoint } = await import("../push.js");
+  const M = 60000;
+  const w = openWorkout({ gym: { logs: {
+    a: { name: "Old", t0: 1000, t1: 5000 },
+    b: { name: "Push A", t0: 10 * M, ta: 65 * M, t1: 0 },
+    c: { name: "Run", t0: 20 * M, t1: 0, cardio: { type: "run" } },
+    d: { name: "Outside", t0: 30 * M, t1: 0, off: true } } } });
+  assert.equal(w.name, "Push A");
+  assert.equal(w.due, 75 * M, "last entry at 65 min: 10 quiet minutes later");
+  assert.equal(openWorkout({ gym: { logs: { b: { name: "x", t0: 10 * M, ta: 12 * M } } } }).due, 70 * M, "never before the hour");
+  assert.equal(openWorkout({ gym: { logs: {} } }), null);
+  assert.equal(openWorkout(null), null);
+  assert.ok(okEndpoint({}, "https://web.push.apple.com/QGx") && okEndpoint({}, "https://fcm.googleapis.com/fcm/send/x"));
+  assert.ok(!okEndpoint({}, "https://push.apple.com.evil.io/x") && !okEndpoint({}, "http://127.0.0.1:1/x"), "localhost only in tests");
+});
+
+test("reminders: the phone opts in from a tap, the service worker shows them, the cron sends them", () => {
+  const on = html.slice(html.indexOf("function remOn("), html.indexOf("function remOff("));
+  assert.ok(on.indexOf("Notification.requestPermission()") < on.indexOf("navigator.serviceWorker.ready"), "iOS only asks inside the tap");
+  assert.ok(html.includes('act==="remon"') && html.includes("h+=remindCard();"));
+  const sw = read("public/sw.js");
+  assert.ok(sw.includes('addEventListener("push"') && sw.includes("/api/push/pending") && sw.includes("showNotification"));
+  assert.ok(sw.includes('addEventListener("notificationclick"') && html.includes("openFromReminder()"));
+  assert.match(wranglerCfg, /"crons":\s*\["\*\/2 \* \* \* \*"\]/);
+  assert.ok(worker.includes("async scheduled(") && worker.includes("syncDue(db, uid, body.state)"));
+  assert.ok(!/VAPID_JWK\s*[:=]\s*["'{]/.test(wranglerCfg + worker), "the signing key is a secret, never in code");
 });

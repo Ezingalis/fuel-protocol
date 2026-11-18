@@ -256,11 +256,40 @@ pain 1-3, note) and next-time weight bumps (`gym.bump[exercise]`).
   (`workSets`). Weekly targets follow the diet (`volTarget`): 8-16 below maintenance, 10-20 at it,
   12-22 above.
 - **Recovery** (`recovery`): sets from the last two weeks fade by half every 36 h (48 h for legs and
-  lower back): worked hard (6+), recovering (2-6), ready, or not trained in 10 days.
-- **Rough day**: before the first set, "Go 10% lighter" scales today's weights (originals kept in
-  `set.lb0`, one tap puts them back).
+  lower back): fatigued (6+), recovering (2-6), ready, or not trained in 10 days. `recovery().by[m]`
+  also has when the muscle was last worked and the hours until it drops under 2 (`eta`).
+- **Muscle map** (`bodyMapSvg`, `bodyMapCard`): a front and back body, each tracked muscle colored.
+  Train → Today shows recovery; Progress → Training toggles recovery and sets this week against the
+  diet-tuned range. Tap a muscle for its line. The artwork is
+  [MuscleMap](https://github.com/melihcolpan/MuscleMap) by Melih Colpan (MIT, the same drawing
+  openGym's body map uses), converted from its Swift source to `MM_FRONT` / `MM_BACK` with the
+  sub-group shapes dropped; the MIT notice sits with the data in `index.html`. Each shape is tagged
+  with the Fuel muscle it stands for (MuscleMap's upper back is lats, rhomboids are middle back,
+  obliques count as abdominals). A session card says which of its muscles are still fatigued.
+- **Check-in** (`checkinHtml`): before the first set, sleep / soreness / energy (1 bad to 3 good,
+  `log.ck`; a second workout the same day reuses the answers). The total, minus one if a muscle in
+  the workout is still fatigued, picks a plan: 4+ as planned, 2-3 go 10% lighter, under 2 go 10%
+  lighter with one set less (`setLighter`, `setFewer`: the last round of each exercise with three or
+  more, kept in `log.fewer`). One tap applies, "Put them back" undoes both. Lighter weights round to
+  5 lb (2.5 under 50) and keep the planned weight in `set.lb0`, so next time starts from the plan and
+  a lighter day earns no bump. The ⋯ menu turns the check-in off (`profile.noCheckin`), which leaves
+  the plain "Go 10% lighter" line.
 - **Cardio**: a log with `log.cardio` {type, min, mi, hr, eff, cal, note}; live timer in
   `gym.cardioLive`. Calories = MET × kg × hours × effort (0.8 / 1 / 1.25).
+- **Workout time**: each save inside an open workout stamps `log.ta` (last entry). Finish after 10
+  quiet minutes ends the workout a minute after the last entry (`workoutEnd`, marked `log.tcap`);
+  a workout left 3 hours with no entries finishes itself the same way, or is closed if no set was
+  done (`autoFinishStale`, checked every minute and on returning to the app, undoable). Tap Time on
+  the summary to set the minutes (45 / 60 / 75 / 90 or typed).
+- **Reminders** (`push.js`): a notification when a workout has been open an hour or more and nothing
+  was entered for 10 minutes, due at max(start + 60 min, last entry + 10 min). Every state save
+  rewrites the person's `push_due` row from the newest open workout (a changed due time re-arms it);
+  a cron every 2 minutes sends what's due, once, to each device in `push_subs`, and drops devices the
+  push service answers 404/410. Pushes are VAPID-signed with no payload; the service worker fetches
+  `/api/push/pending` for the workout's name and minutes, and tapping opens the workout. Only real push
+  service hosts can subscribe. The key lives in the `VAPID_JWK` secret, made by
+  `scripts/vapid-key.mjs` piped straight into `wrangler secret put`. Turned on per phone in Settings
+  (iOS needs the Home Screen app and asks inside the tap).
 - **CSV**: export is one row per set (and per cardio session). Import reads Hevy's or Strong's export,
   converts kg, groups rows back into workouts, skips anything already imported (`log.imp`), and goes
   through `gymChange` so one undo removes it.
@@ -272,7 +301,7 @@ Done returning to the tab you came from. Views inside a tab are a segmented cont
 
 - **Food**: Meal plans | Recipes.
 - **Train**: **Today** (the workout in progress or Up next with Start, done today, quick start for an
-  empty workout or cardio, this week's day dots, a one-line recovery summary) | **Plan** (the
+  empty workout or cardio, this week's day dots, the recovery muscle map) | **Plan** (the
   program's week, saved videos, scheduled sessions, sets per muscle, routines, programs, "Add a
   program" for PDF or code) | **History** (month calendar and every workout and cardio session,
   newest first).
