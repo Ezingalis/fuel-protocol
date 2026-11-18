@@ -941,3 +941,27 @@ test("training methods: plain-language notes, linked from programs that name a t
   assert.equal(f.methodFor("3 sets"), null);
   assert.ok(html.includes('k==="methods"?methodsBody()') && html.includes('act==="methods"') && html.includes("methodFor(ex.target)"), "Library card and player link");
 });
+
+test("strength by muscle: best estimated max on the main lift, change on the same lift, × body weight", () => {
+  const ago = n => { const d = new Date("2026-11-18T12:00:00"); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+  const lg = (n, m, lb, reps) => ({ t1: 1, ex: [{ n, m, sets: [{ lb, reps, done: true }] }] });
+  const DB = { profile: { weightLb: 180 }, gym: { logs: {
+    [ago(70)]: lg("Barbell Bench Press", "chest", 185, 5), [ago(10)]: lg("Barbell Bench Press", "chest", 195, 5),
+    [ago(9)]: lg("Cable Fly", "chest", 300, 12), [ago(5)]: lg("Barbell Squat", "quadriceps", 225, 5), [ago(200)]: lg("Barbell Row", "middle back", 185, 8) } } };
+  const src = html.slice(html.indexOf("function e1rm("), html.indexOf("function finishedKeys(")) +
+    html.slice(html.indexOf("function exMetrics("), html.indexOf("/* every finished workout that did this exercise")) +
+    html.slice(html.indexOf("/* Strength by muscle"), html.indexOf("function statsBody("));
+  const stubs = "function todayStr(){return '2026-11-18';}function dateAdd(d,n){var t=new Date(d+'T12:00:00');t.setDate(t.getDate()+n);return t.toISOString().slice(0,10);}" +
+    "function logDate(k){return k.slice(0,10);}function finishedKeys(){return Object.keys(DB.gym.logs).sort();}var GEN_BIG=/^(squat|hinge|hpush|vpush|hpull|vpull|lunge|thrust)$/;" +
+    "function exInfoOf(n){return {p:/press|squat|row/i.test(n)?'hpush':'fly'};}function esc(s){return String(s);}function IC(){return '';}";
+  const f = new Function("DB", stubs + src + "; return {strengthByMuscle,strengthCard};")(DB);
+  const r = f.strengthByMuscle();
+  const chest = r.find(x => x.g === "Chest");
+  assert.equal(chest.n, "Barbell Bench Press", "the big lift beats a heavier-looking fly");
+  assert.equal(chest.e1, 228);
+  assert.equal(chest.ch, 5, "195 vs 185 on the same lift");
+  assert.equal(r.find(x => x.g === "Quads").ch, null, "nothing to compare with yet");
+  assert.ok(!r.some(x => x.g === "Back"), "older than 16 weeks doesn't count");
+  assert.match(f.strengthCard(), /1\.27× body weight/);
+  assert.ok(html.includes("muscleBarsCard()+strengthCard()"));
+});

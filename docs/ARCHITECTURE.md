@@ -386,3 +386,7 @@ The exercise page switches between Video, Drawing and Photos, whichever exist. T
 ## Training methods
 
 Train → Library → **Training methods** is a plain-language guide to the terms programs use: RPE and RIR, progressive overload, weekly volume, frequency, rest, tempo and pauses, warm-up sets, %1RM, AMRAP, failure, drop sets, rest-pause and myo-reps, supersets, lengthened partials, top and back-off sets, deloads, periodization, mind-muscle connection, and sleep and protein. Each says what it is, how to do it, and how Fuel handles it. The list of topics came from surveying the methods the owner's own programs use. The text is written fresh for Fuel and doesn't reproduce any program. In the player, a program target that names a technique ("drop set on the last", "RPE 8", "superset") gets a link to its note (`methodFor`).
+
+## Strength by muscle
+
+Progress → Training shows each muscle group's strength the way Fitbod's strength score does, kept simple (`strengthByMuscle`). For Chest, Back, Shoulders, Quads, Hamstrings and glutes, and Arms: the best estimated 1-rep max (Epley) over the last 8 weeks on the group's main lift, where a big compound lift counts ahead of isolation work. Next to it, the change against the same lift in the 8 weeks before, and the max as a multiple of body weight (from `profile.weightLb`). Tap a row for that lift's history.

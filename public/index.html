@@ -288,6 +288,7 @@ select{appearance:none;-webkit-appearance:none;padding-right:34px;
 .method[open] summary .ic{transform:rotate(180deg)}.method p{margin:0 16px 10px;font-size:14.5px;line-height:1.5;color:var(--ink)}
 .mfuel{margin:4px 16px 16px;padding:10px 12px;border-radius:var(--r-sm);background:var(--greenSoft);color:var(--green2);font-size:13.5px;line-height:1.45}
 .mlink{padding:4px 0 0;font-size:13px}.mlink .ic{width:15px;height:15px}
+.strch{font-size:12.5px;font-weight:650;margin-right:8px;color:var(--sub)}.strch.up{color:var(--green2)}.strch.dn{color:var(--amber)}
 .genchips{gap:6px}.genchips .chip{padding:8px 11px}
 .genrow{display:flex;align-items:center;gap:10px;padding:8px 0}
 .genname{text-align:left;min-width:0;padding:0;background:none;color:inherit}
@@ -2650,6 +2651,26 @@ function muscleBarsCard(){
     h+='</div><div class="fnote">The main muscle counts a full set, the muscles that help count half (a press also works triceps). A drop set or rest-pause round counts once. The shaded range is '+vt.lo+'-'+vt.hi+' sets a week'+(vt.why?' '+vt.why:'')+'.</div></div>';}
   return h;
 }
+/* Strength by muscle (the idea behind Fitbod's strength score, kept simple): each muscle group's best estimated
+   1-rep max over the last 8 weeks on its main lift (a big compound lift counts ahead of isolation work), the change
+   against the same lift in the 8 weeks before, and how it compares with body weight. */
+var STR_GROUPS=[["Chest",["chest"]],["Back",["lats","middle back"]],["Shoulders",["shoulders"]],["Quads",["quadriceps"]],
+  ["Hamstrings and glutes",["hamstrings","glutes","lower back"]],["Arms",["biceps","triceps"]]];
+function strengthByMuscle(){
+  var t=todayStr(),a=dateAdd(t,-55),b=dateAdd(t,-111),best={};
+  finishedKeys().forEach(function(k){var d=logDate(k);if(d<b||d>t)return;var L=DB.gym.logs[k];
+    (L.ex||[]).forEach(function(ex){var mx=exMetrics(L,ex.n);if(!mx.e1)return;var o=best[ex.n]||(best[ex.n]={m:ex.m,rec:0,prev:0});
+      if(d>=a){if(mx.e1>o.rec)o.rec=mx.e1;}else if(mx.e1>o.prev)o.prev=mx.e1;});});
+  return STR_GROUPS.map(function(g){var top=null;
+    Object.keys(best).forEach(function(n){var o=best[n];if(g[1].indexOf(o.m)<0||!o.rec)return;
+      var sc=o.rec*(GEN_BIG.test(exInfoOf(n,o.m).p)?1:0.5);if(!top||sc>top.sc)top={n:n,rec:o.rec,prev:o.prev,sc:sc};});
+    return top?{g:g[0],n:top.n,e1:Math.round(top.rec),ch:top.prev?Math.round((top.rec/top.prev-1)*100):null}:null;}).filter(Boolean);}
+function strengthCard(){var rows=strengthByMuscle(),bw=DB.profile.weightLb||0;if(!rows.length)return '';
+  var h='<div class="card"><div class="mealhd"><span class="mt">Strength by muscle</span><span class="mcal">est. max · 8 weeks</span></div><div class="wklist">';
+  rows.forEach(function(r){h+='<button class="wkrow" data-act="stex" data-n="'+esc(r.n)+'"><span class="grow"><span class="ln">'+esc(r.g)+'</span><br><span class="ls">'+esc(r.n)+
+    (bw?' · '+(Math.round(r.e1/bw*100)/100)+'× body weight':'')+'</span></span>'+
+    (r.ch!=null?'<span class="strch num'+(r.ch>0?' up':r.ch<0?' dn':'')+'">'+(r.ch>0?'+':'')+r.ch+'%</span>':'')+'<b class="num">'+r.e1+'</b>'+IC("caretr")+'</button>';});
+  return h+'</div><div class="fnote">Each muscle’s best estimated 1-rep max on its main lift, from weight × (1 + reps ÷ 30). The percentage compares the same lift with the 8 weeks before.</div></div>';}
 function statsBody(st){
   var sh=st||V.sheet,r=sh.r||"3m",m=sh.m||"vol",t=todayStr(),a=rangeStart(r),len=daysBetween(a,t)+1,keys=finishedKeys(),h='';
   if(!keys.length)return '<div class="empty">Finish a workout and your stats start here.</div>';
@@ -2681,7 +2702,7 @@ function statsBody(st){
   h+='<div class="card"><div class="mealhd"><span class="mt">Consistency</span><span class="mcal num">'+streak+' week'+(streak===1?'':'s')+' in a row</span></div>'+cal+
      '<div class="fnote">The last 12 weeks, Monday to Sunday. The streak counts weeks with at least one workout.</div></div>';
   /* sets per muscle, last 7 days, against 10-20 */
-  h+=bodyMapCard(V.bmMode||"week",true)+muscleBarsCard();
+  h+=bodyMapCard(V.bmMode||"week",true)+muscleBarsCard()+strengthCard();
   /* records and exercises */
   var ex={};keys.forEach(function(k){var seen={};(DB.gym.logs[k].ex||[]).forEach(function(e){if(seen[e.n])return;seen[e.n]=1;if(exMetrics(DB.gym.logs[k],e.n).sets)ex[e.n]=(ex[e.n]||0)+1;});});
   var prs=DB.gym.prs||{},pk=Object.keys(prs).filter(function(n){return prs[n].lb>0;}).sort(function(x,y){return e1rm(prs[y].lb,prs[y].reps)-e1rm(prs[x].lb,prs[x].reps);});
