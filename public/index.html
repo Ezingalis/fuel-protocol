@@ -283,6 +283,11 @@ select{appearance:none;-webkit-appearance:none;padding-right:34px;
 .kv b{font-weight:650}
 .camv{width:100%;border-radius:16px;background:#0C0E11;max-height:230px;object-fit:cover;margin-top:10px}
 .warn{background:var(--amberSoft);color:var(--amber);border-radius:var(--r-sm);padding:11px 13px;font-size:13.5px;font-weight:500;line-height:1.5;margin-top:10px}
+.method{padding:0;overflow:hidden}.method summary{display:flex;align-items:center;gap:10px;padding:14px 16px;cursor:pointer;list-style:none}
+.method summary::-webkit-details-marker{display:none}.method summary .ic{width:18px;height:18px;color:var(--faint);transition:transform .2s}
+.method[open] summary .ic{transform:rotate(180deg)}.method p{margin:0 16px 10px;font-size:14.5px;line-height:1.5;color:var(--ink)}
+.mfuel{margin:4px 16px 16px;padding:10px 12px;border-radius:var(--r-sm);background:var(--greenSoft);color:var(--green2);font-size:13.5px;line-height:1.45}
+.mlink{padding:4px 0 0;font-size:13px}.mlink .ic{width:15px;height:15px}
 .genchips{gap:6px}.genchips .chip{padding:8px 11px}
 .genrow{display:flex;align-items:center;gap:10px;padding:8px 0}
 .genname{text-align:left;min-width:0;padding:0;background:none;color:inherit}
@@ -1552,7 +1557,7 @@ function exAnim(x,photo){if(!x)return '';
   if(x.ek&&!(photo&&x.ph))return '<div class="exanim ekanim"><img class="ekimg" src="/lib/ek/'+x.ek+'.svg" alt="'+esc(x.n)+', drawn moving from start to end"></div>';
   return x.ph?'<div class="exanim"><img src="/lib/'+x.id+'/0.jpg" alt="'+esc(x.n)+', start"><img class="b" src="/lib/'+x.id+'/1.jpg" alt="'+esc(x.n)+', end"></div>':'';}
 function exCredit(x){if(!x)return '';var ek=String(x.id).indexOf("ek_")===0;
-  return (ek?'Drawing and steps: Everkinetic by Greg Priday (CC BY-SA 4.0).':(x.ek?'Drawing: Everkinetic by Greg Priday (CC BY-SA 4.0). ':'')+(x.ph||x.st?(x.ph?'Photos':'')+(x.ph&&x.st?' and steps':x.st?'Steps':'')+': free-exercise-db (public domain).':''))+' Muscle drawing: MuscleMap (MIT).';}
+  return (x.va?'Video: '+x.va+' via wger (CC BY-SA 4.0). ':'')+(ek?'Drawing and steps: Everkinetic by Greg Priday (CC BY-SA 4.0).':(x.ek?'Drawing: Everkinetic by Greg Priday (CC BY-SA 4.0). ':'')+(x.ph||x.st?(x.ph?'Photos':'')+(x.ph&&x.st?' and steps':x.st?'Steps':'')+': free-exercise-db (public domain).':''))+' Muscle drawing: MuscleMap (MIT).';}
 /* demo clips from your programs, by step name, for library pages that match one */
 function progVideoFor(n){var hit=null,want=String(n||"").toLowerCase();
   (DB.gym.programs||[]).forEach(function(p){(p.weeks||[]).forEach(function(w){(w.sessions||[]).forEach(function(se){(se.ex||[]).forEach(function(e){
@@ -1599,41 +1604,51 @@ function libraryView(){
   if(f.open==="lv")h+='<div class="chips fpanel">'+opt("lv","all","All levels")+opt("lv","0","Beginner")+opt("lv","1","Intermediate")+opt("lv","2","Expert")+'</div>';
   h+='<button class="card instbar" data-act="equip" style="margin-top:12px">'+IC("gym")+'<span class="grow"><b>Equipment and swaps</b><br><span class="ls">'+esc(loc.name)+
     ' · what your workouts need, what to buy next</span></span>'+IC("caretr")+'</button>';
+  h+='<button class="card instbar" data-act="methods">'+IC("list")+'<span class="grow"><b>Training methods</b><br><span class="ls">RPE, drop sets, supersets, deloads and the rest, in plain words</span></span>'+IC("caretr")+'</button>';
   h+=libPhotosCard();
   return h+'<div id="liblist">'+libRows()+'</div>';}
 /* every library photo on the phone at once (they're also kept one by one as you look) */
 var LIB_CACHE="fuel-lib",LDL={saved:null,busy:false,done:0,total:0,err:0};
-function libPhotoPaths(){var out=[];(EXDB||[]).forEach(function(x){if(x.ph)out.push("/lib/"+x.id+"/0.jpg","/lib/"+x.id+"/1.jpg");if(x.ek)out.push("/lib/ek/"+x.ek+".svg");});return out;}
+function libPhotoPaths(){var out=[];(EXDB||[]).forEach(function(x){if(x.ph)out.push("/lib/"+x.id+"/0.jpg","/lib/"+x.id+"/1.jpg");if(x.ek)out.push("/lib/ek/"+x.ek+".svg");
+  if(x.v)out.push("/media/ex/"+x.v+".mp4","/media/ex/"+x.v+".jpg");});return out;}
+function libCacheFor(p){return p.indexOf("/media/")===0?MEDIA_CACHE:LIB_CACHE;}
 function libCountSaved(){if(!("caches" in window)){LDL.saved=-1;return;}LDL.saved=-1;
-  caches.open(LIB_CACHE).then(function(c){return c.keys();}).then(function(k){LDL.saved=k.length;if(V.tab==="gym")render();}).catch(function(){});}
+  var want={};libPhotoPaths().forEach(function(p){want[p]=1;});
+  Promise.all([LIB_CACHE,MEDIA_CACHE].map(function(n){return caches.open(n).then(function(c){return c.keys();});})).then(function(r){var n=0;
+    r.forEach(function(keys){keys.forEach(function(q){if(want[new URL(q.url).pathname])n++;});});LDL.saved=n;if(V.tab==="gym")render();}).catch(function(){});}
 function libPhotosCard(){
   if(!("caches" in window))return "";
   var all=libPhotoPaths().length;if(LDL.saved==null){libCountSaved();return "";}
-  if(LDL.busy)return '<div class="card"><div class="mealhd"><span class="mt">Saving photos and drawings</span><span class="mcal num">'+LDL.done+' of '+LDL.total+'</span></div>'+
+  if(LDL.busy)return '<div class="card"><div class="mealhd"><span class="mt">Saving the library</span><span class="mcal num">'+LDL.done+' of '+LDL.total+'</span></div>'+
     '<div class="calbar" style="height:6px;margin-top:12px"><i style="width:'+Math.round(LDL.done/Math.max(1,LDL.total)*100)+'%;background:linear-gradient(90deg,var(--ring1),var(--ring2))"></i></div></div>';
   if(LDL.saved<0||LDL.saved>=all)return "";
-  return '<button class="card instbar" data-act="libsave">'+IC("download")+'<span class="grow"><b>Photos and drawings with no Wi-Fi</b><br><span class="ls num">'+
-    (LDL.saved?Math.min(99,Math.floor(LDL.saved/all*100))+'% saved. ':'')+'Save them all, about 30 MB</span></span>'+IC("caretr")+'</button>';}
+  return '<button class="card instbar" data-act="libsave">'+IC("download")+'<span class="grow"><b>Videos, drawings and photos with no Wi-Fi</b><br><span class="ls num">'+
+    (LDL.saved?Math.min(99,Math.floor(LDL.saved/all*100))+'% saved. ':'')+'Save them all, about 45 MB</span></span>'+IC("caretr")+'</button>';}
 function libSave(){
   if(LDL.busy||!("caches" in window))return;
   try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();}catch(e){}
   var paths=libPhotoPaths();LDL.busy=true;LDL.done=0;LDL.total=paths.length;LDL.err=0;render();var last=0;
-  caches.open(LIB_CACHE).then(function(c){return c.keys().then(function(keys){
-    var have={};keys.forEach(function(r){have[new URL(r.url).pathname]=1;});var q=paths.filter(function(p2){return !have[p2];});LDL.done=LDL.total-q.length;
-    function one(){var p2=q.shift();if(!p2)return Promise.resolve();
-      return fetch(p2).then(function(r){if(r.status===200)return c.put(p2,r);throw 0;}).catch(function(){LDL.err++;})
+  Promise.all([caches.open(LIB_CACHE),caches.open(MEDIA_CACHE)]).then(function(cs){var cache={};cache[LIB_CACHE]=cs[0];cache[MEDIA_CACHE]=cs[1];
+    return Promise.all([cs[0].keys(),cs[1].keys()]).then(function(ks){
+    var have={};ks[0].concat(ks[1]).forEach(function(r){have[new URL(r.url).pathname]=1;});var q=paths.filter(function(p2){return !have[p2];});LDL.done=LDL.total-q.length;
+    function one(){var p2=q.shift();if(!p2)return Promise.resolve();var c=cache[libCacheFor(p2)];
+      /* clips are stored whole (as a blob) so the service worker can cut them to the range the player asks for */
+      return fetch(p2).then(function(r){if(r.status!==200)throw 0;return /\.mp4$/.test(p2)?r.blob().then(function(b){return c.put(p2,new Response(b,{headers:{"Content-Type":"video/mp4"}}));}):c.put(p2,r);}).catch(function(){LDL.err++;})
         .then(function(){LDL.done++;if(Date.now()-last>600){last=Date.now();if(V.tab==="gym")render();}return one();});}
     return Promise.all([one(),one(),one(),one(),one(),one()]);});})
   .catch(function(){LDL.err=LDL.total;}).then(function(){LDL.busy=false;LDL.saved=null;render();
-    showUndo(LDL.err?"Saved all but "+LDL.err+" files":"Exercise photos and drawings saved. The library works with no connection",null);});}
+    showUndo(LDL.err?"Saved all but "+LDL.err+" files":"Exercise videos, drawings and photos saved. The library works with no connection",null);});}
 /* ---------- one exercise: how it moves, what it works, how to do it ---------- */
 function exInfoBody(){
   var sh=V.sheet;if(!EXDB){loadEXDB();return '<div class="empty">Loading…</div>';}
   var x=EXBYN[String(sh.n).toLowerCase()]||exFind(sh.n,sh.m),name=sh.n,m=x?x.m:(sh.m||"other"),loc=curLoc();
-  var sec=x?(x.s||[]):helperMuscles(name,m),eq=x?x.eq:exEquip({n:name}),pt=x?x.p:exPattern({n:name,m:m}),vid=sh.v?{v:sh.v}:progVideoFor(name),h='';
-  if(vid)h+='<div class="plvid exvid"><video src="/media/ex/'+vid.v+'.mp4" poster="/media/ex/'+vid.v+'.jpg" autoplay muted loop playsinline preload="auto"></video></div>';
-  else{h+=exAnim(x,sh.photo);
-    if(x&&x.ek&&x.ph)h+='<div class="chips exview">'+[["0","Drawing"],["1","Photos"]].map(function(o){return '<button class="chip'+((sh.photo?"1":"0")===o[0]?" on":"")+'" data-act="exview" data-v="'+o[0]+'">'+o[1]+'</button>';}).join("")+'</div>';}
+  var sec=x?(x.s||[]):helperMuscles(name,m),eq=x?x.eq:exEquip({n:name}),pt=x?x.p:exPattern({n:name,m:m}),vid=sh.v?{v:sh.v}:progVideoFor(name)||(x&&x.v?{v:x.v}:null),h='';
+  /* a demo video, the drawing, the photos: whichever there are, the first one showing */
+  var mv=[];if(vid)mv.push(["vid","Video"]);if(x&&x.ek)mv.push(["draw","Drawing"]);if(x&&x.ph)mv.push(["photo","Photos"]);
+  var cur=mv.some(function(o){return o[0]===sh.mv;})?sh.mv:(mv[0]||[""])[0];
+  if(cur==="vid")h+='<div class="plvid exvid"><video src="/media/ex/'+vid.v+'.mp4" poster="/media/ex/'+vid.v+'.jpg" autoplay muted loop playsinline preload="auto"></video></div>';
+  else h+=exAnim(x,cur==="photo");
+  if(mv.length>1)h+='<div class="chips exview">'+mv.map(function(o){return '<button class="chip'+(o[0]===cur?" on":"")+'" data-act="exview" data-v="'+o[0]+'">'+o[1]+'</button>';}).join("")+'</div>';
   if(x&&x.n!==name)h+='<div class="fnote">Closest match in the library: '+esc(x.n)+'.</div>';
   h+='<div class="chips exchips">'+[capFirst(m),PATN[pt]].concat(x?[["Beginner","Intermediate","Expert"][x.lv],x.mc==="c"?"Compound":x.mc==="i"?"Isolation":""]:[])
     .filter(Boolean).map(function(t){return '<span class="mtag">'+esc(t)+'</span>';}).join("")+'</div>';
@@ -1781,7 +1796,7 @@ function genScore(x,o){var s=0,u=o.use[x.n]||0,pr=o.pref[x.n];
   if(u)s+=25+Math.min(15,u/3);else s-=[12,0,-4][o.v];
   if(pr===1)s+=20;else if(pr===-1)s-=25;
   if(x.lv===2)s-=15;else if(x.lv===1)s-=2;
-  if(x.ph||x.ek||(x.lib&&(x.lib.ph||x.lib.ek)))s+=4;
+  if(x.ph||x.ek||x.v||(x.lib&&(x.lib.ph||x.lib.ek||x.lib.v)))s+=4;
   if(GEN_STAPLE[x.n])s+=12;
   /* bands are the fallback, not the first choice, when the place has more */
   if(x.eq.indexOf("band")>=0&&o.loc.eq.some(function(k){return k!=="band";}))s-=8;
@@ -1876,6 +1891,94 @@ function warmupHtml(log,i){var ex=log.ex[i],wu=ex&&!ex.sets.some(function(x){ret
   return '<div class="warmup">'+IC("bolt")+'<span class="grow"><b>Warm up first</b><br><span class="num">'+wu.map(function(x){return x.lb+' × '+x.reps;}).join(' · ')+'</span></span></div>';}
 /* a library page's photos in the player, for exercises with no demo clip */
 function exLibFor(ex){if(!EXDB||!ex)return null;var x=EXBYN[String(ex.n).toLowerCase()];if(x)return x;x=exFind(exClean(ex.n),ex.m);return x&&EXF_J>=0.66?x:null;}
+/* ---------------- training methods ----------------
+   Plain-language notes on the methods programs use (RPE, drop sets, deloads...), written for Fuel, with how the
+   app handles each. Opened from Train > Library, and from the player when a program names a technique. */
+var METHODS=[
+  {k:"effort",q:"What’s RPE?",t:"Effort: RPE and RIR",re:/\brpe\b|\brir\b|reps? in reserve/i,s:"How hard a set was, and how many reps you had left",
+   p:["RPE rates a set from 1 to 10 by how hard it felt. RIR counts the reps you could still have done. They say the same thing: RPE 10 is nothing left, RPE 9 is one rep left, RPE 8 is two, RPE 7 is three.",
+      "Most muscle-building sets belong 1 to 3 reps short of failure. Big free-weight lifts sit toward the easier end, since form slips and fatigue costs more; small machine and cable moves can go closer.",
+      "When a program says “RPE 8”, pick the weight that leaves about two reps in the tank, not the number from last week."],
+   f:"Fuel asks how hard each set was right after you log it (turn it off from the workout’s ⋯ menu)."},
+  {k:"overload",t:"Progressive overload",re:/progressi|double progression/i,s:"Doing a little more over time",
+   p:["Muscles grow when the work keeps getting a little harder: more weight, more reps at the same weight, or more sets at the same effort.",
+      "Double progression is the simplest way. Pick a rep range, say 8 to 12. Add reps each session until every set reaches 12, then add weight and start again near 8.",
+      "Small steps win. Five pounds on a barbell, or the next dumbbell up, is plenty."],
+   f:"When every set hits its target reps, Fuel starts the next one 5 lb heavier (2.5 on light weights), unless you said the workout was all-out or something hurt."},
+  {k:"volume",t:"Volume: sets per week",re:/volume|sets per week/i,s:"How many hard sets each muscle gets",
+   p:["Count hard sets (within about 3 reps of failure) for each muscle across the week. Somewhere around 10 to 20 works for most people.",
+      "Start near the low end and add sets when you’re recovering well and progress slows. More isn’t better if it leaves you sore and weaker next time.",
+      "A set only partly aimed at a muscle counts about half: a bench press is a full set for chest and half a set for triceps."],
+   f:"Progress › Training shows each muscle’s sets this week against a target, which drops while you’re eating below maintenance."},
+  {k:"frequency",t:"Frequency",re:/frequency|times (a|per) week/i,s:"How often each muscle is trained",
+   p:["Training a muscle twice a week usually beats once for the same weekly sets. Each session’s sets are fresher, so more of them count.",
+      "Spread the week’s sets over two or three days instead of stacking them into one long session."],
+   f:"Build a workout picks muscles that are rested and furthest behind on this week’s sets."},
+  {k:"rest",t:"Rest between sets",re:/\brest\b(?!-?pause)/i,s:"How long to wait before the next set",
+   p:["Big compound lifts: 2 to 3 minutes, longer for very heavy sets. Smaller lifts: 1 to 2 minutes.",
+      "Cutting rest short costs reps on the next set, which costs progress. If time is tight, pair two exercises that don’t compete (see supersets) instead of rushing."],
+   f:"The rest timer starts each time you log a set, set by the program, or 2 minutes for big lifts and 75 seconds for small ones in built workouts."},
+  {k:"tempo",q:"How to read tempo",t:"Tempo, eccentrics and pauses",re:/tempo|eccentric|pause[ds]? rep|\d-\d-\d-\d/i,s:"Controlling the speed of each rep",
+   p:["Tempo is written as four numbers, such as 3-1-1-0: seconds lowering, pause at the bottom, seconds lifting, pause at the top.",
+      "Lowering under control (about 2 to 3 seconds) keeps the muscle working and the form the same rep to rep. Lift as fast as you can while staying in control.",
+      "A pause rep holds 1 to 2 seconds at the hardest point, like the bar on your chest in a bench press. It takes away the bounce and builds strength right there."]},
+  {k:"warmup",t:"Warm-up sets",re:/warm.?up|ramp/i,s:"Getting ready for the first heavy lift",
+   p:["Before the first heavy lift for a muscle, work up in a few sets: an empty bar or light weight for 8 to 10, then roughly half, 70% and 85% of your working weight for fewer reps each.",
+      "Warm-ups are practice, not work. They shouldn’t tire you, and later exercises for the same muscle need little or none."],
+   f:"The player suggests a ramp above the sets of the first big lift for each muscle. Warm-ups aren’t logged, so they never count toward volume or records."},
+  {k:"percent",q:"What’s %1RM?",t:"Percent of 1RM",re:/1\s?rm|%/i,s:"Weights written as a share of your max",
+   p:["Some programs give heavy work as a percentage of your one-rep max (the most you can lift once). As a rough guide, about 85% is a hard 5, 80% a hard 8, 75% a hard 10 and 70% a hard 12.",
+      "You don’t have to test a true max. A hard set of 3 to 8 reps gives a good estimate, and people vary, so adjust by how the sets feel."],
+   f:"Fuel estimates your max from your best sets (weight × (1 + reps ÷ 30)) and shows it in each exercise’s history."},
+  {k:"amrap",q:"What’s AMRAP?",t:"AMRAP sets",re:/amrap|as many reps/i,s:"As many reps as possible",
+   p:["Do as many good reps as you can at the given weight. Stop when the form breaks, not after a slow grind with the bar drifting.",
+      "An AMRAP is a test: the reps you get show whether your working weights are right and update your estimated max."]},
+  {k:"failure",q:"How close to failure?",t:"Going to failure",re:/failure/i,s:"When to push a set all the way",
+   p:["Failure is the rep you can’t finish with good form. Taking every set there piles up fatigue for very little extra growth.",
+      "Save it for the last set of isolation and machine exercises. Keep big free-weight lifts 1 to 3 reps short."]},
+  {k:"drop",q:"What’s a drop set?",t:"Drop sets",re:/drop.?set|\bdrop\b/i,s:"Lower the weight and keep going",
+   p:["Take a set close to failure, cut the weight by about 20 to 30%, and keep going with no rest. Once or twice is enough.",
+      "A mechanical drop set changes to an easier version of the move instead of a lighter weight, like incline push-ups after flat ones run out."],
+   f:"Programs log drop sets as Top, Drop 1, Drop 2. The whole run counts as one set for muscle volume."},
+  {k:"restpause",q:"What’s rest-pause?",t:"Rest-pause and myo-reps",re:/rest.?pause|myo|cluster/i,s:"Short breaks to squeeze out more reps",
+   p:["Rest-pause: take a set close to failure, rest 10 to 20 seconds, get a few more reps, and repeat once or twice.",
+      "Myo-reps: one longer set close to failure, then mini-sets of 3 to 5 reps with a few breaths between, until the reps drop off.",
+      "Cluster sets do the same for heavy weights: a hard set split into small chunks with 15 to 30 seconds between, so the load stays heavy."],
+   f:"Logged as Main, then Mini 1, Mini 2. Counted as one set for muscle volume."},
+  {k:"superset",q:"What’s a superset?",t:"Supersets and giant sets",re:/super.?set|giant|circuit|\b[ab]1\b/i,s:"Exercises back to back",
+   p:["A superset is two exercises done back to back, resting after the pair. Muscles that don’t compete (chest and back, biceps and triceps) save time without costing reps.",
+      "Two moves for the same muscle make it harder on purpose. A giant set is three or more in a row."],
+   f:"Programs log the moves in a superset as A and B in the same round."},
+  {k:"partials",q:"What are lengthened partials?",t:"Lengthened partials",re:/partial/i,s:"Half reps in the stretched position",
+   p:["When full reps run out, keep going with half reps in the stretched part of the range, like the bottom half of a curl or a fly.",
+      "They add work where the muscle is long, which seems to be good for growth, without needing a lighter weight."]},
+  {k:"topset",q:"What’s a top set?",t:"Top set and back-off sets",re:/top set|back.?off/i,s:"One heavy set, then lighter ones",
+   p:["Work up to one heaviest set for the day, then drop about 10 to 20% for a few more sets.",
+      "The top set drives strength; the back-off sets add volume while you’re still fresh enough to move well."]},
+  {k:"deload",t:"Deloads",re:/deload/i,s:"A lighter week to let fatigue clear",
+   p:["Every 4 to 8 weeks, or when progress stalls and joints ache, train a lighter week: keep the same exercises, cut the sets by a third to a half, and stay further from failure (or drop the weights 10 to 20%).",
+      "Fitness stays; fatigue fades. The next block starts fresher, and the weights usually move better."],
+   f:"Programs mark deload weeks. On a rough day, the check-in before a workout offers 10% lighter and one set less."},
+  {k:"periodization",t:"Periodization",re:/periodi|undulat|linear|block/i,s:"Planning how the work changes over weeks",
+   p:["Linear: the weight goes up and the reps come down over several weeks.",
+      "Undulating: heavy, medium and light days in the same week.",
+      "Block: a few weeks of higher volume, then a few weeks of heavier, lower-rep work.",
+      "All of them work if the work keeps getting harder over time. The best one is the one you’ll stick to."]},
+  {k:"focus",t:"Mind-muscle connection",re:/mind.?muscle|squeeze|contract/i,s:"Where to put your attention",
+   p:["On isolation moves, thinking about the muscle you’re training (squeezing it, controlling the lowering) can make it do more of the work.",
+      "On heavy compound lifts, focus on moving the weight well instead."]},
+  {k:"recovery",t:"Sleep, protein and eating",re:/recomp|protein|sleep|calori|deficit|surplus/i,s:"What lets the training work",
+   p:["Aim for 7 to 9 hours of sleep. Short sleep shows up as weaker sessions within days.",
+      "Protein matters most: roughly 0.7 to 1 g per pound of body weight a day, spread over a few meals.",
+      "Gaining muscle is easiest a little above maintenance calories. In a deficit, keep lifting heavy and keep protein high to hold on to muscle; beginners and people returning to training can often build muscle while losing fat."],
+   f:"The Diary tracks protein and calories against your targets, and the muscle volume target drops while you’re eating below maintenance."}];
+function methodFor(t){t=String(t||"");if(!t)return null;var order=["drop","restpause","superset","partials","topset","amrap","failure","tempo","effort","percent"];
+  for(var i=0;i<order.length;i++){var m=METHODS.filter(function(x){return x.k===order[i];})[0];if(m&&m.re.test(t))return m;}return null;}
+function methodsBody(){var sh=V.sheet,h='<div class="ls" style="margin:0 0 6px">What the words in programs mean, and how to use them. Tap one to open it.</div>';
+  METHODS.forEach(function(m){var on=sh.k===m.k;
+    h+='<details class="card method" id="m-'+m.k+'"'+(on?' open':'')+'><summary><span class="grow"><b>'+esc(m.t)+'</b><br><span class="ls">'+esc(m.s)+'</span></span>'+IC("caretd")+'</summary>'+
+      m.p.map(function(t){return '<p>'+esc(t)+'</p>';}).join("")+(m.f?'<div class="mfuel"><b>In Fuel</b> '+esc(m.f)+'</div>':'')+'</details>';});
+  return h+'<div class="fnote">General guidance written for Fuel, not medical advice. If something hurts (not just hard work), stop and get it checked.</div>';}
 /* rest timer between sets */
 var GT={left:0,timer:null};
 function fmtRest(s){return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");}
@@ -2717,7 +2820,7 @@ function plHead(log,ro){
 }
 function plMedia(log){
   var sh=V.sheet,ex=!sh.list&&!sh.sum&&!sh.swap&&log.ex[sh.i],vids=ex?exVideos(ex):[],x=vids[Math.min(sh.vi||0,vids.length-1)];
-  if(!x){var lx=ex&&exLibFor(ex);return lx&&(lx.ph||lx.ek)?'<div class="plph">'+exAnim(lx)+'</div>':'';}
+  if(!x){var lx=ex&&exLibFor(ex);if(lx&&lx.v)x={v:lx.v,n:lx.n};else return lx&&(lx.ph||lx.ek)?'<div class="plph">'+exAnim(lx)+'</div>':'';}
   return '<div class="plvid"><video src="/media/ex/'+x.v+'.mp4" poster="/media/ex/'+x.v+'.jpg" autoplay muted loop playsinline preload="auto"></video>'+
     '<button class="plexp" data-act="vid" data-v="'+x.v+'" data-n="'+esc(x.n)+'" aria-label="Open the video larger, with controls">'+IC("expand")+'</button>'+
     '<div class="vmsg" hidden>This video isn’t saved on this phone. Connect to the internet, or save videos for offline from the Workout tab.</div></div>';
@@ -2808,7 +2911,7 @@ function plMain(log,ro){
   var canSwap=!ro&&!log.t1&&!ex.sets.some(function(x){return x.done;});
   h+='<div class="exhd" style="margin-top:16px"><div class="grow"><button class="plname plinfo" data-act="exinfo" data-n="'+esc(ex.n)+'" data-m="'+esc(ex.m)+'"'+
      (vids[0]?' data-v="'+vids[0].v+'"':'')+'>'+esc(ex.n)+'</button>'+(ex.was?'<div class="ls">Instead of '+esc(ex.was)+'</div>':'')+
-     (meta?'<div class="extarget">'+esc(meta)+'</div>':'')+(ex.notes?'<div class="exnote">'+esc(ex.notes)+'</div>':'')+'</div>'+
+     (meta?'<div class="extarget">'+esc(meta)+'</div>':'')+(function(){var mt=methodFor(ex.target);return mt?'<button class="textbtn mlink" data-act="methods" data-k="'+mt.k+'">'+IC("list")+esc(mt.q||mt.t)+'</button>':'';})()+(ex.notes?'<div class="exnote">'+esc(ex.notes)+'</div>':'')+'</div>'+
      '<span class="exhdr"><span class="mtag">'+esc(ex.m)+'</span>'+(canSwap?'<button class="textbtn exswap" data-act="swapopen">'+IC("swap")+'Swap</button>':'')+'</span></div>';
   h+=lastTimeLine(ex.n,ro?null:sh.ds,ro||log.t1?null:sh.i);
   if(!ro&&!log.t1)h+=warmupHtml(log,sh.i);
@@ -3921,7 +4024,7 @@ function sheetBody(){
     k==="logrecipe"?logRecipeBody():k==="applyplan"?applyPlanBody():k==="cal"?calBody():
     k==="copy"?copyBody():k==="planview"?planViewBody():k==="planbuild"?planBuildBody():
     k==="pbpick"?pbPickBody():k==="clearplan"?clearPlanBody():
-    k==="progopts"?progOptsBody():k==="install"?installBody():k==="gymstats"?statsBody():k==="gymex"?exStatBody():k==="cardio"?cardioBody():k==="csvimp"?csvImpBody():k==="addprog"?addProgBody():k==="gympick"?gymPickBody():k==="exinfo"?exInfoBody():k==="gen"?genBody():k==="equip"?equipBody():k==="locedit"?locEditBody():k==="gymroutine"?gymRoutineBody():
+    k==="progopts"?progOptsBody():k==="install"?installBody():k==="gymstats"?statsBody():k==="gymex"?exStatBody():k==="cardio"?cardioBody():k==="csvimp"?csvImpBody():k==="addprog"?addProgBody():k==="gympick"?gymPickBody():k==="exinfo"?exInfoBody():k==="gen"?genBody():k==="methods"?methodsBody():k==="equip"?equipBody():k==="locedit"?locEditBody():k==="gymroutine"?gymRoutineBody():
     k==="gymimport"?gymImportBody():k==="progview"?progViewBody():k==="progsched"?progSchedBody():"";
 }
 
@@ -3941,7 +4044,7 @@ function render(){
   if(V.sheet&&V.sheet.kind!=="gymlog"&&V.sheet.kind!=="gymprev"){
     var titles={progopts:"Program",install:"Use Fuel offline",gymstats:"Training stats",gymex:(V.sheet.n||"Exercise"),cardio:(V.sheet.k?"Cardio":V.sheet.live?"Save your session":"Cardio"),csvimp:"Import workouts",addprog:"Add a program",add:"Add to "+(V.sheet.target?MEALS[V.sheet.target.meal]||"recipe":""),entry:"Edit food",recipe:(V.sheet.editingId?"Edit recipe":"New recipe"),logrecipe:"Log recipe",applyplan:"Log full plan",cal:"Jump to a date",copy:"Copy a meal",
       planview:(planById(V.sheet.pid)||{}).name||"Plan",planbuild:(V.sheet.editingId?"Edit plan":"Create a meal plan"),pbpick:"Add to Day "+((V.sheet.dayIdx||0)+1),clearplan:"Remove plan foods",
-      gymlog:(DB.gym.logs[V.sheet.ds]||{}).name||"Workout",exinfo:V.sheet.n||"Exercise",gen:"Build a workout",equip:"Equipment and swaps",locedit:"Edit "+curLoc().name,gympick:"Add exercise",gymroutine:(V.sheet.editingId?"Edit routine":"New routine"),
+      gymlog:(DB.gym.logs[V.sheet.ds]||{}).name||"Workout",exinfo:V.sheet.n||"Exercise",gen:"Build a workout",methods:"Training methods",equip:"Equipment and swaps",locedit:"Edit "+curLoc().name,gympick:"Add exercise",gymroutine:(V.sheet.editingId?"Edit routine":"New routine"),
       gymimport:(V.sheet.stage==="reading"?"Importing":"Review program"),progview:(progById(V.sheet.pid)||{}).name||"Program",progsched:(V.sheet.s>=0?"Schedule a day":"Schedule a week")};
     h+=sheetHTML(sheetBody(),titles[V.sheet.kind]||"",sheetSizeClass());
   }
@@ -4427,8 +4530,10 @@ document.addEventListener("click",function(ev){
   else if(act==="exinfo"){var inN=el.getAttribute("data-n"),back=V.sheet;
     if(back&&back.kind==="exinfo"&&back.n===inN)return;
     V.sheet={kind:"exinfo",n:inN,m:el.getAttribute("data-m")||"",v:el.getAttribute("data-v")||"",back:back};render();var sc=document.querySelector(".sheet .sbody,.sheet");if(sc)sc.scrollTop=0;}
-  else if(act==="exview"){V.sheet.photo=el.getAttribute("data-v")==="1";rerenderSheet();}
+  else if(act==="exview"){V.sheet.mv=el.getAttribute("data-v");rerenderSheet();}
   else if(act==="expref"){var pg=DB.gym;if(!pg.pref)pg.pref={};var pvv=+el.getAttribute("data-v");if(pvv)pg.pref[V.sheet.n]=pvv;else delete pg.pref[V.sheet.n];save();rerenderSheet();}
+  else if(act==="methods"){var mk=el.getAttribute("data-k")||"";V.sheet={kind:"methods",k:mk,back:V.sheet&&V.sheet.kind!=="methods"?V.sheet:null};render();
+    if(mk)setTimeout(function(){var me=document.getElementById("m-"+mk);if(me)me.scrollIntoView({block:"start"});},60);}
   else if(act==="genopen"){V.sheet={kind:"gen",back:null};if(!EXDB)loadEXDB();render();}
   else if(act==="genmin"||act==="genfocus"||act==="genvar"){var gp=genPrefs(),gv=el.getAttribute("data-v");
     if(act==="genmin")gp.min=+gv;else if(act==="genfocus")gp.focus=gv;else gp.v=+gv;V.sheet.items=null;save();rerenderSheet();}

@@ -914,3 +914,30 @@ test("drawings: Everkinetic line art on 200+ exercises, new ones added, credited
   assert.ok(f.exEquip({ n: "Wide Grip Chin Up" }).includes("pullup"), "a chin up needs a bar");
   assert.ok(html.includes('"/lib/ek/"+x.ek+".svg"') && html.includes("libPhotoPaths") && html.includes('act==="exview"'));
 });
+
+test("videos: wger clips on 40+ library exercises, credited to their author", () => {
+  const ex = JSON.parse(read("public/exercises.json")), vids = ex.filter(x => x.v);
+  assert.ok(vids.length >= 40, `${vids.length} with a video`);
+  assert.ok(vids.every(x => /^wger\d+$/.test(x.v) && x.va), "every clip has its author");
+  assert.equal(new Set(vids.map(x => x.v)).size, vids.length, "one exercise per clip");
+  assert.equal(ex.find(x => x.n === "Barbell Shrug").v, "wger570", "checked by eye: a barbell in a rack");
+  assert.equal(ex.find(x => x.n === "Pullups").v, undefined, "the assisted-machine clip isn't shown as a pull-up");
+  assert.ok(/wger/.test(read("CREDITS.md")) && gitignore.includes("public/media"), "credited; clips stay out of git");
+  assert.ok(html.includes("progVideoFor(name)||(x&&x.v?{v:x.v}:null)") && html.includes("if(lx&&lx.v)x={v:lx.v,n:lx.n}"), "exercise page and player play them");
+  assert.ok(html.includes("'Video: '+x.va+' via wger (CC BY-SA 4.0). '"));
+  assert.ok(html.includes('if(x.v)out.push("/media/ex/"+x.v+".mp4","/media/ex/"+x.v+".jpg")') && html.includes("libCacheFor"), "saved offline into the clip cache");
+});
+
+test("training methods: plain-language notes, linked from programs that name a technique", () => {
+  const f = fnFrom("/* ---------------- training methods", "/* rest timer between sets */", "{METHODS,methodFor}", ["esc", "IC", "V"], [String, () => "", {}]);
+  const keys = f.METHODS.map(m => m.k);
+  for (const k of ["effort", "overload", "volume", "rest", "tempo", "warmup", "percent", "amrap", "failure", "drop", "restpause", "superset", "partials", "topset", "deload", "periodization"])
+    assert.ok(keys.includes(k), `missing ${k}`);
+  assert.ok(f.METHODS.every(m => m.t && m.s && m.p.length), "each has a title, a line and text");
+  assert.equal(f.methodFor("3 × 8-10 · drop set on the last").k, "drop");
+  assert.equal(f.methodFor("Myo-reps").k, "restpause");
+  assert.equal(f.methodFor("Superset with B").k, "superset");
+  assert.equal(f.methodFor("RPE 8"), f.METHODS.find(m => m.k === "effort"));
+  assert.equal(f.methodFor("3 sets"), null);
+  assert.ok(html.includes('k==="methods"?methodsBody()') && html.includes('act==="methods"') && html.includes("methodFor(ex.target)"), "Library card and player link");
+});

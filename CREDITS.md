@@ -15,6 +15,13 @@ Fuel Protocol's own code is in this repository. The exercise library and drawing
 - Used for: the line drawings served from `/lib/ek/<number>.svg` (not in this repository), and the steps and muscles of the exercises in `public/exercises.json` whose id starts with `ek_`.
 - Changes: the white background layer of each drawing was removed, the start and end drawings were combined into one SVG that switches between them, and the lines are shown light on the dark theme. These adapted drawings are shared under the same CC BY-SA 4.0 license. Built by `scripts/build-everkinetic.mjs`.
 
+## Exercise videos: wger
+
+- Source: [wger.de](https://wger.de) exercise videos ([API](https://wger.de/api/v2/video/)), filmed by Goulart
+- License: [Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/)
+- Used for: 41 short demo clips served from `/media/ex/wger<id>.mp4` with a poster frame (not in this repository). The exercise page names the author of each clip.
+- Changes: each clip was cut to at most 10 seconds from its middle, cropped square, scaled to 480 × 480 and re-encoded without sound. These adapted clips are shared under the same CC BY-SA 4.0 license. Built by `scripts/build-wger-videos.mjs`.
+
 ## Muscle map: MuscleMap
 
 - Source: [github.com/melihcolpan/MuscleMap](https://github.com/melihcolpan/MuscleMap) by Melih Colpan
