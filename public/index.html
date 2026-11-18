@@ -283,6 +283,16 @@ select{appearance:none;-webkit-appearance:none;padding-right:34px;
 .kv b{font-weight:650}
 .camv{width:100%;border-radius:16px;background:#0C0E11;max-height:230px;object-fit:cover;margin-top:10px}
 .warn{background:var(--amberSoft);color:var(--amber);border-radius:var(--r-sm);padding:11px 13px;font-size:13.5px;font-weight:500;line-height:1.5;margin-top:10px}
+.genchips{gap:6px}.genchips .chip{padding:8px 11px}
+.genrow{display:flex;align-items:center;gap:10px;padding:8px 0}
+.genname{text-align:left;min-width:0;padding:0;background:none;color:inherit}
+.genname .ln{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.genbtn{flex:0 0 auto;width:38px;height:38px;display:grid;place-items:center;border-radius:12px;color:var(--sub);background:var(--bg2,transparent)}
+.genbtn .ic{width:18px;height:18px}
+.genbar{margin-top:12px}.genbar>.ic:first-child{color:var(--green2)}
+.warmup{display:flex;align-items:center;gap:10px;margin-top:10px;padding:10px 12px;border-radius:var(--r-sm);background:var(--amberSoft);color:var(--ink);font-size:13.5px;line-height:1.4}
+.warmup>.ic{width:18px;height:18px;color:var(--amber);flex:0 0 auto}
+.plph{margin:0 auto;width:min(100%,46vh)}
 .okline{background:var(--greenSoft);color:var(--green2);border-radius:var(--r-sm);padding:11px 13px;font-size:13.5px;font-weight:600;line-height:1.45;margin-top:10px}
 .chartcard svg{display:block;width:100%}
 .chartcard text{font-family:"Geist",system-ui,sans-serif}
@@ -1705,6 +1715,155 @@ function locEditBody(){
   h+='<div class="fnote">Bodyweight exercises always count. Swaps and the library show what this place has.</div>';
   if(locs().length>1)h+='<button class="bigbtn ghost danger" data-act="locdel" style="margin-top:12px">'+IC("trash")+'Remove '+esc(loc.name)+'</button>';
   return h;}
+/* ---------------- build a workout (the Fitbod idea) ----------------
+   Picks muscles that are rested and behind on this week's sets, then fills the time you have with exercises
+   your place has: big lifts first, smaller ones after. Exercises you've done come first, "more", "less" and
+   "never" are respected, and Variety sets how often new ones come up. Weights come from last time (scaled to
+   the reps) or your best set. Nothing is saved until you start it, and any exercise can be reshuffled first. */
+var GEN_SPLITS={
+  push:["Push",[["chest","hpush"],["shoulders","vpush"],["chest","hpush fly"],["shoulders","raise"],["triceps","triceps"],["chest","fly"],["triceps","triceps"]]],
+  pull:["Pull",[["lats","vpull"],["middle back","hpull"],["middle back","hpull"],["shoulders","reardelt"],["biceps","curl"],["traps","shrug"],["biceps","curl"]]],
+  legs:["Legs",[["quadriceps","squat"],["hamstrings","hinge"],["quadriceps","lunge squat"],["hamstrings","legcurl hinge"],["glutes","thrust"],["calves","calf"],["quadriceps","legext"]]],
+  upper:["Upper body",[["chest","hpush"],["lats","vpull"],["shoulders","vpush"],["middle back","hpull"],["biceps","curl"],["triceps","triceps"],["shoulders","raise"]]],
+  lower:["Lower body",[["quadriceps","squat"],["hamstrings","hinge"],["glutes","thrust"],["quadriceps","lunge"],["hamstrings","legcurl hinge"],["calves","calf"],["abdominals","core"]]],
+  full:["Full body",[["quadriceps","squat"],["chest","hpush"],["lats","vpull hpull"],["hamstrings","hinge"],["shoulders","vpush"],["middle back","hpull"],["abdominals","core"]]]};
+var GEN_ORDER=["push","pull","legs","upper","lower","full"],GEN_BIG=/^(squat|hinge|hpush|vpush|hpull|vpull|lunge|thrust)$/;
+var GEN_SKIP=/plank|\bhold\b|isometric|wall sit|stretch|static|external rotation|internal rotation/i;
+/* the lifts most gyms and coaches build around: ranked ahead of the library's oddities */
+var GEN_STAPLE={};["Barbell Squat","Goblet Squat","Leg Press","Hack Squat","Front Squat (Clean Grip)","Romanian Deadlift","Barbell Deadlift","Good Morning",
+  "Stiff-Legged Barbell Deadlift","Stiff-Legged Dumbbell Deadlift","Barbell Bench Press - Medium Grip","Dumbbell Bench Press","Barbell Incline Bench Press - Medium Grip",
+  "Incline Dumbbell Press","Machine Bench Press","Dumbbell Floor Press","Pushups","Dips - Chest Version","Dips - Triceps Version","Dumbbell Flyes","Incline Dumbbell Flyes",
+  "Butterfly","Cable Crossover","Pullups","Chin-Up","Wide-Grip Lat Pulldown","Close-Grip Front Lat Pulldown","Bent Over Barbell Row","One-Arm Dumbbell Row",
+  "Seated Cable Rows","T-Bar Row with Handle","Bent Over Two-Dumbbell Row","Inverted Row","Standing Military Press","Dumbbell Shoulder Press","Arnold Dumbbell Press",
+  "Seated Barbell Military Press","Machine Shoulder (Military) Press","Side Lateral Raise","Cable Seated Lateral Raise","Face Pull","Reverse Flyes","Cable Rear Delt Fly",
+  "Reverse Machine Flyes","Barbell Curl","Dumbbell Bicep Curl","Hammer Curls","EZ-Bar Curl","Preacher Curl","Incline Dumbbell Curl","Triceps Pushdown",
+  "Triceps Pushdown - Rope Attachment","EZ-Bar Skullcrusher","Lying Triceps Press","Standing Dumbbell Triceps Extension","Close-Grip Barbell Bench Press",
+  "Lying Leg Curls","Seated Leg Curl","Glute Ham Raise","Leg Extensions","Barbell Hip Thrust","Barbell Glute Bridge","Single Leg Glute Bridge","Standing Calf Raises",
+  "Seated Calf Raise","Standing Barbell Calf Raise","Barbell Shrug","Dumbbell Shrug","Crunches","Cable Crunch","Hanging Leg Raise","Flat Bench Lying Leg Raise",
+  "Ab Roller","Russian Twist","Dumbbell Lunges","Barbell Walking Lunge","Split Squat with Dumbbells","Dumbbell Step Ups","Hyperextensions (Back Extensions)",
+  "One-Arm Kettlebell Swings","Bodyweight Squat"].forEach(function(n){GEN_STAPLE[n]=1;});
+function genPrefs(){var g=DB.gym;if(!g.gen)g.gen={min:60,focus:"auto",v:1};return g.gen;}
+function genMuscles(k){var out=[];GEN_SPLITS[k][1].forEach(function(s){if(out.indexOf(s[0])<0)out.push(s[0]);});return out;}
+/* Auto: the split whose muscles are the most rested and the furthest behind this week */
+function genAuto(){
+  if(!finishedKeys().length)return {k:"full",why:"a full-body start, since there’s no history yet."};
+  var rc=recovery(),wk=weekMuscleSets(),vt=volTarget(),best="full",bs=-1e9;
+  GEN_ORDER.forEach(function(k){var mus=genMuscles(k),s=0;
+    mus.forEach(function(m){var b=rc.by[m]||{st:"idle"};s+=b.st==="hard"?-10:b.st==="recovering"?-3:b.st==="idle"?1:0;
+      s+=Math.min(10,Math.max(0,vt.lo-(wk[m]||0)))*0.5;});
+    s=s/mus.length-(k==="full"?0.6:0);
+    if(s>bs){bs=s;best=k;}});
+  var mus=genMuscles(best),fresh=mus.filter(function(m){var b=rc.by[m];return !b||b.st==="ready"||b.st==="idle";}),
+    sore=rc.hard.filter(function(m){return mus.indexOf(m)<0;});
+  var why=(fresh.length?andList(fresh.slice(0,3))+(fresh.length===1?" is":" are")+" rested":"")+
+    (sore.length?(fresh.length?"; ":"")+andList(sore.slice(0,3))+(sore.length===1?" is":" are")+" still recovering":"");
+  return {k:best,why:(why||"the most rested muscles")+"."};}
+/* your own exercises (from programs) that aren't in the library, when their equipment is known */
+function genOwn(){var use=exUse(365),out=[];
+  Object.keys(use).forEach(function(n){if(EXBYN[n.toLowerCase()])return;var m=EX_MUS[n];if(!m||m==="other")return;
+    var inf=exInfoOf(n,m);if(!inf.eq.length)return;
+    out.push({n:n,m:m,eq:inf.eq,p:inf.p,c:"strength",lv:0,mc:GEN_BIG.test(inf.p)?"c":"i",own:1,lib:inf.x});});
+  return out;}
+function genCtx(v,rand){return {v:v,rand:rand||Math.random,loc:curLoc(),use:exUse(365),recent:exUse(7),pref:DB.gym.pref||{},pool:(EXDB||[]).concat(genOwn())};}
+function genScore(x,o){var s=0,u=o.use[x.n]||0,pr=o.pref[x.n];
+  if(u)s+=25+Math.min(15,u/3);else s-=[12,0,-4][o.v];
+  if(pr===1)s+=20;else if(pr===-1)s-=25;
+  if(x.lv===2)s-=15;else if(x.lv===1)s-=2;
+  if(x.ph||(x.lib&&x.lib.ph))s+=4;
+  if(GEN_STAPLE[x.n])s+=12;
+  /* bands are the fallback, not the first choice, when the place has more */
+  if(x.eq.indexOf("band")>=0&&o.loc.eq.some(function(k){return k!=="band";}))s-=8;
+  /* a bodyweight squat or lunge is a warm-up where there are weights to load */
+  if(/^(squat|hinge|lunge|thrust)$/.test(x.p)&&x.eq.every(function(k){return k==="bw";})&&o.loc.eq.some(function(k){return k==="bb"||k==="db"||k==="kb";}))s-=10;
+  if(o.recent[x.n])s-=[0,6,25][o.v];
+  return s+o.rand()*[3,12,28][o.v];}
+/* who can fill a slot: same main muscle and movement, at this place; then the same muscle, any movement */
+function genCands(slot,taken,o){
+  var pats=slot[1].split(" "),out=[];
+  var ok=function(x){return x.m===slot[0]&&!taken[x.n]&&!(x.lib&&taken[x.lib.n])&&o.pref[x.n]!==-9&&(x.c==="strength"||x.c==="powerlifting")&&!GEN_SKIP.test(x.n)&&canDo(x.eq,o.loc);};
+  o.pool.forEach(function(x){if(ok(x)&&pats.indexOf(x.p)>=0)out.push({x:x,s:genScore(x,o)-(taken[genKind(x)]?20:0)});});
+  if(!out.length)o.pool.forEach(function(x){if(ok(x)&&x.p!=="stretch"&&x.p!=="cardio")out.push({x:x,s:genScore(x,o)-10});});
+  out.sort(function(a,b){return b.s-a.s;});
+  return out;}
+function genRound(w){return w<50?Math.round(w/2.5)*2.5:Math.round(w/5)*5;}
+/* the weight for this many reps: last time's best set scaled by estimated 1-rep max, else your best set ever */
+function genLoad(n,reps){var ls=lastSets(n)||[],best=0,bw=0,dn=ls.filter(function(x){return x.done;});if(dn.length)ls=dn;
+  ls.forEach(function(x){if(x.t)return;var e=e1rm(x.lb,x.reps);if(e>best)best=e;if(!(x.lb>0)&&x.reps>bw)bw=x.reps;});
+  if(!best){var pr=DB.gym.prs&&DB.gym.prs[n];if(pr&&pr.lb>0)best=e1rm(pr.lb,pr.reps);}
+  if(best)return {lb:genRound(best/(1+reps/30)+(DB.gym.bump&&DB.gym.bump[n]||0)),reps:reps};
+  return {lb:0,reps:bw||reps};}
+function genItem(x,slot,four){var big=GEN_BIG.test(x.p),reps=big?8:/^(calf|core)$/.test(x.p)?15:12,ld=genLoad(x.n,reps);
+  return {n:x.n,m:x.m,p:x.p,x:x,slot:slot,sets:four&&big?4:3,reps:ld.reps,lb:ld.lb,rest:big?120:75};}
+/* about 7 exercises an hour and 4 in half an hour: 30 s to set up, 45 s a set, plus the rest between sets */
+function genSecs(it){return 30+it.sets*(45+it.rest);}
+function genMin(items){var t=0;items.forEach(function(it){t+=genSecs(it);});return Math.round(t/60);}
+function genBuild(k,min,o,auto){
+  var slots=GEN_SPLITS[k][1],rc=recovery(),items=[],taken={},t=0,skipped=[],long=min>=75;
+  slots=slots.concat(slots.slice(2));
+  for(var i=0;i<slots.length;i++){var sl=slots[i];
+    if(auto&&rc.by[sl[0]]&&rc.by[sl[0]].st==="hard"){if(skipped.indexOf(sl[0])<0)skipped.push(sl[0]);continue;}
+    var c=genCands(sl,taken,o)[0];if(!c)continue;
+    var it=genItem(c.x,sl,i<2&&long);
+    if(items.length>=2&&t+genSecs(it)>min*60+120)break;
+    items.push(it);genTake(taken,c.x);t+=genSecs(it);}
+  return {items:items,skipped:skipped};}
+/* your "Barbell Bench Press" and the library's "Barbell Bench Press - Medium Grip" are one exercise */
+function genTake(taken,x){taken[x.n]=1;if(x.lib)taken[x.lib.n]=1;taken[genKind(x)]=1;}
+/* pull-ups then chin-ups is the same lift twice: same movement, same equipment */
+function genKind(x){return "@"+x.p+"|"+x.eq.filter(function(k){return k!=="band";}).sort().join(",");}
+function genSig(){var l=curLoc();return l.id+"|"+l.eq.join(",");}
+function genFill(sh){var p=genPrefs(),a=p.focus==="auto"?genAuto():null,k=a?a.k:GEN_SPLITS[p.focus]?p.focus:"full";
+  var r=genBuild(k,p.min,genCtx(p.v),!!a);sh.k=k;sh.why=a?a.why:"";sh.items=r.items;sh.skipped=r.skipped;sh.sig=genSig();}
+/* a different exercise for one slot: anything not already in the workout, a bit more random than the first pick */
+function genRepick(sh,i){var it=sh.items[i];if(!it)return false;var taken={};sh.items.forEach(function(x){genTake(taken,x.x);});
+  var c=genCands(it.slot,taken,genCtx(Math.max(1,genPrefs().v)))[0];if(!c)return false;
+  sh.items[i]=genItem(c.x,it.slot,it.sets===4);return true;}
+function genChips(act,cur,opts){return '<div class="chips genchips">'+opts.map(function(o){return '<button class="chip'+(String(o[0])===String(cur)?" on":"")+'" data-act="'+act+'" data-v="'+o[0]+'">'+o[1]+'</button>';}).join("")+'</div>';}
+function genBody(){
+  var sh=V.sheet,p=genPrefs();if(!EXDB){loadEXDB();return '<div class="empty">Loading the exercise library…</div>';}
+  if(!sh.items||sh.sig!==genSig())genFill(sh);
+  var loc=curLoc(),rc=recovery(),h='';
+  h+='<div class="flabel" style="margin-top:0">Time</div>'+genChips("genmin",p.min,[[30,"30 min"],[45,"45"],[60,"60"],[75,"75"],[90,"90"]]);
+  h+='<div class="flabel">Focus</div>'+genChips("genfocus",p.focus,[["auto","Auto"]].concat(GEN_ORDER.map(function(k){return [k,GEN_SPLITS[k][0]];})));
+  if(sh.why)h+='<div class="okline">Auto picked '+esc(GEN_SPLITS[sh.k][0])+': '+esc(sh.why)+'</div>';
+  if(sh.skipped&&sh.skipped.length)h+='<div class="fnote">Left out '+esc(andList(sh.skipped))+': still recovering.</div>';
+  h+='<div class="card"><div class="mealhd"><span class="mt">'+esc(GEN_SPLITS[sh.k][0])+' · '+sh.items.length+' exercise'+(sh.items.length===1?'':'s')+'</span>'+
+    '<span class="ls num">about '+genMin(sh.items)+' min</span></div><div class="wklist">';
+  var sore=[];sh.items.forEach(function(it){var b=rc.by[it.m];if(b&&b.st==="hard"&&sore.indexOf(it.m)<0)sore.push(it.m);});
+  if(sore.length)h+='<div class="hwarn" style="margin:0 0 6px">Still recovering: '+esc(andList(sore))+'</div>';
+  sh.items.forEach(function(it,i){
+    h+='<div class="wkrow genrow">'+exThumb(it.x.own?it.x.lib:it.x)+
+      '<button class="grow genname" data-act="exinfo" data-n="'+esc(it.n)+'" data-m="'+esc(it.m)+'"><span class="ln">'+esc(it.n)+'</span>'+
+      '<span class="ls num">'+it.sets+' × '+it.reps+(it.lb?' · '+it.lb+' lb':'')+' · '+esc(capFirst(it.m))+'</span></button>'+
+      '<button class="genbtn" data-act="genre" data-i="'+i+'" aria-label="Pick a different exercise for '+esc(it.n)+'">'+IC("redo")+'</button>'+
+      '<button class="genbtn" data-act="gendel" data-i="'+i+'" aria-label="Remove '+esc(it.n)+'">'+IC("x")+'</button></div>';});
+  if(!sh.items.length)h+='<div class="empty">Nothing fits with what '+esc(loc.name)+' has. Pick another focus or place.</div>';
+  h+='</div><div style="text-align:center"><button class="textbtn" data-act="genshuf">'+IC("redo")+'Shuffle all</button></div></div>';
+  h+='<button class="bigbtn" data-act="genstart"'+(sh.items.length?'':' disabled')+'>'+IC("play")+'Start workout</button>';
+  h+='<div class="fnote">Weights are from last time, or your best set. Swap or change anything once you start.</div>';
+  h+='<div class="flabel">Variety</div>'+genChips("genvar",p.v,[[0,"Favorites"],[1,"Balanced"],[2,"Mix it up"]]);
+  h+='<div class="fnote">Favorites sticks to what you’ve done. Mix it up brings in new exercises and skips this week’s.</div>';
+  return h+'<button class="card instbar" data-act="equip" style="margin-top:12px">'+IC("gym")+'<span class="grow"><b>'+esc(loc.name)+'</b><br><span class="ls">Only what it has · tap to change</span></span>'+IC("caretr")+'</button>';}
+function genStart(sh){
+  var key=newLogKey(todayStr()),log={rid:null,name:GEN_SPLITS[sh.k][0]+" workout",gen:sh.k,ex:[],t0:Date.now(),t1:0};
+  sh.items.forEach(function(it){var sets=[];for(var i=0;i<it.sets;i++)sets.push({reps:it.reps,lb:it.lb,tr:it.reps,done:false});
+    log.ex.push({n:it.n,m:it.m,sets:sets,target:"",rest:it.rest,notes:""});if(DB.gym.bump)delete DB.gym.bump[it.n];});
+  DB.gym.logs[key]=log;PL.prev=null;save();gymOpenKey(key);return key;}
+/* A short ramp before the first big lift for a muscle: about half, then 70%, then 85% of the working weight.
+   Shown above the sets, not logged, so it never counts toward volume. Off from the workout's ⋯ menu. */
+function warmupFor(log,i){var ex=log.ex[i];if(!ex||DB.profile.noWarmup)return null;
+  var inf=exInfoOf(ex.n,ex.m);if(!GEN_BIG.test(inf.p))return null;
+  for(var j=0;j<i;j++)if(log.ex[j].m===ex.m)return null;
+  var w=0;ex.sets.forEach(function(x){if(!x.t&&x.lb>w)w=x.lb;});if(w<65)return null;
+  var bar=inf.eq.indexOf("bb")>=0?45:0,out=[];
+  if(bar)out.push({lb:bar,reps:10});
+  (w>=135?[[0.5,8],[0.7,5],[0.85,3]]:[[0.5,8],[0.75,4]]).forEach(function(r){var lb=Math.max(bar,genRound(w*r[0]));
+    if(lb<w&&(!out.length||lb>out[out.length-1].lb))out.push({lb:lb,reps:r[1]});});
+  return out.length?out:null;}
+function warmupHtml(log,i){var ex=log.ex[i],wu=ex&&!ex.sets.some(function(x){return x.done;})&&warmupFor(log,i);if(!wu)return '';
+  return '<div class="warmup">'+IC("bolt")+'<span class="grow"><b>Warm up first</b><br><span class="num">'+wu.map(function(x){return x.lb+' × '+x.reps;}).join(' · ')+'</span></span></div>';}
+/* a library page's photos in the player, for exercises with no demo clip */
+function exLibFor(ex){if(!EXDB||!ex)return null;var x=EXBYN[String(ex.n).toLowerCase()];if(x)return x;x=exFind(exClean(ex.n),ex.m);return x&&EXF_J>=0.66?x:null;}
 /* rest timer between sets */
 var GT={left:0,timer:null};
 function fmtRest(s){return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");}
@@ -2546,7 +2705,7 @@ function plHead(log,ro){
 }
 function plMedia(log){
   var sh=V.sheet,ex=!sh.list&&!sh.sum&&!sh.swap&&log.ex[sh.i],vids=ex?exVideos(ex):[],x=vids[Math.min(sh.vi||0,vids.length-1)];
-  if(!x)return '';
+  if(!x){var lx=ex&&exLibFor(ex);return lx&&lx.ph?'<div class="plph">'+exAnim(lx)+'</div>':'';}
   return '<div class="plvid"><video src="/media/ex/'+x.v+'.mp4" poster="/media/ex/'+x.v+'.jpg" autoplay muted loop playsinline preload="auto"></video>'+
     '<button class="plexp" data-act="vid" data-v="'+x.v+'" data-n="'+esc(x.n)+'" aria-label="Open the video larger, with controls">'+IC("expand")+'</button>'+
     '<div class="vmsg" hidden>This video isn’t saved on this phone. Connect to the internet, or save videos for offline from the Workout tab.</div></div>';
@@ -2640,6 +2799,7 @@ function plMain(log,ro){
      (meta?'<div class="extarget">'+esc(meta)+'</div>':'')+(ex.notes?'<div class="exnote">'+esc(ex.notes)+'</div>':'')+'</div>'+
      '<span class="exhdr"><span class="mtag">'+esc(ex.m)+'</span>'+(canSwap?'<button class="textbtn exswap" data-act="swapopen">'+IC("swap")+'Swap</button>':'')+'</span></div>';
   h+=lastTimeLine(ex.n,ro?null:sh.ds,ro||log.t1?null:sh.i);
+  if(!ro&&!log.t1)h+=warmupHtml(log,sh.i);
   /* a lone step with no cue says nothing the rows below don't */
   if(ex.st&&!(ex.st.length===1&&(ex.st[0].x||1)===1&&!ex.st[0].c))h+=stepsHtml(ex,true);
   h+=setRowsHtml(ex,sh.i,ro);
@@ -2658,6 +2818,7 @@ function plMenu(log,ro){
     h+=b("prevsched","Put it on the calendar","plans","");
   }else if(!log.t1)h+=b("gymfinish","Finish workout now","flag","")+(DB.profile.noRPE?b("rpeon","Ask how hard each set was","timer",""):b("rpeoff","Stop asking how hard each set was","timer",""))+
     (DB.profile.noCheckin?b("ckon","Ask how I feel before workouts","bolt",""):b("ckoff","Stop the check-in before workouts","bolt",""))+
+    (DB.profile.noWarmup?b("wuon","Suggest warm-up sets","bolt",""):b("wuoff","Stop suggesting warm-up sets","bolt",""))+
     b("gymdel","Discard this workout","trash","danger");
   else h+=b("gymreopen","Edit sets","pencil","")+b("gymdel","Delete this workout","trash","danger");
   return h+b("plmenu","Cancel","x","ghost")+'</div>';
@@ -2702,7 +2863,9 @@ function paintPlayer(){
     try{if(navigator.wakeLock&&!PL.wake)navigator.wakeLock.request("screen").then(function(w){PL.wake=w;}).catch(function(){});}catch(e){}
   }
   document.getElementById("plhd").innerHTML=plHead(log,ro);
-  var key=sh.kind+"|"+(sh.ds||(PL.prev&&PL.prev.k))+"|"+(sh.sum?"sum":sh.list?"list":sh.i+"|"+(sh.vi||0)+"|"+log.ex.length);
+  /* the exercise's name is in the key so a swap changes the clip; the library flag shows photos once it loads */
+  if(!EXDB&&!sh.sum&&!sh.list)loadEXDB();
+  var key=sh.kind+"|"+(sh.ds||(PL.prev&&PL.prev.k))+"|"+(sh.sum?"sum":sh.list?"list":sh.swap?"swap":sh.i+"|"+(sh.vi||0)+"|"+log.ex.length+"|"+((log.ex[sh.i]||{}).n||"")+"|"+(EXDB?1:0));
   if(key!==PL.mkey){
     var md=document.getElementById("plmedia");stopVideo(md);md.innerHTML=plMedia(log);PL.mkey=key;
     var nv=md.querySelector("video");
@@ -3109,6 +3272,8 @@ function renderGym(){
       h+='<button class="wkrow" data-act="gymopen" data-k="'+k+'"><span class="grow"><span class="ln">'+esc(L.name)+'</span><br><span class="ls num">'+esc(logLine(L))+'</span></span>'+IC("caretr")+'</button>';});
     h+='</div></div>';
   }
+  /* build one from what's rested and what your place has */
+  if(!openK)h+='<button class="card instbar genbar" data-act="genopen">'+IC("bolt")+'<span class="grow"><b>Build a workout</b><br><span class="ls">From rested muscles and what '+esc(curLoc().name)+' has</span></span>'+IC("caretr")+'</button>';
   /* quick start: an empty workout, or cardio */
   h+='<div class="qrow">'+(openK?'':'<button class="qbtn" data-act="gymstart" data-d="'+today+'" data-src="empty">'+IC("plus")+'<span>Empty workout</span></button>')+
      '<button class="qbtn" data-act="cardio" data-v="run">'+IC("timer")+'<span>Log cardio</span></button></div>';
@@ -3744,7 +3909,7 @@ function sheetBody(){
     k==="logrecipe"?logRecipeBody():k==="applyplan"?applyPlanBody():k==="cal"?calBody():
     k==="copy"?copyBody():k==="planview"?planViewBody():k==="planbuild"?planBuildBody():
     k==="pbpick"?pbPickBody():k==="clearplan"?clearPlanBody():
-    k==="progopts"?progOptsBody():k==="install"?installBody():k==="gymstats"?statsBody():k==="gymex"?exStatBody():k==="cardio"?cardioBody():k==="csvimp"?csvImpBody():k==="addprog"?addProgBody():k==="gympick"?gymPickBody():k==="exinfo"?exInfoBody():k==="equip"?equipBody():k==="locedit"?locEditBody():k==="gymroutine"?gymRoutineBody():
+    k==="progopts"?progOptsBody():k==="install"?installBody():k==="gymstats"?statsBody():k==="gymex"?exStatBody():k==="cardio"?cardioBody():k==="csvimp"?csvImpBody():k==="addprog"?addProgBody():k==="gympick"?gymPickBody():k==="exinfo"?exInfoBody():k==="gen"?genBody():k==="equip"?equipBody():k==="locedit"?locEditBody():k==="gymroutine"?gymRoutineBody():
     k==="gymimport"?gymImportBody():k==="progview"?progViewBody():k==="progsched"?progSchedBody():"";
 }
 
@@ -3764,7 +3929,7 @@ function render(){
   if(V.sheet&&V.sheet.kind!=="gymlog"&&V.sheet.kind!=="gymprev"){
     var titles={progopts:"Program",install:"Use Fuel offline",gymstats:"Training stats",gymex:(V.sheet.n||"Exercise"),cardio:(V.sheet.k?"Cardio":V.sheet.live?"Save your session":"Cardio"),csvimp:"Import workouts",addprog:"Add a program",add:"Add to "+(V.sheet.target?MEALS[V.sheet.target.meal]||"recipe":""),entry:"Edit food",recipe:(V.sheet.editingId?"Edit recipe":"New recipe"),logrecipe:"Log recipe",applyplan:"Log full plan",cal:"Jump to a date",copy:"Copy a meal",
       planview:(planById(V.sheet.pid)||{}).name||"Plan",planbuild:(V.sheet.editingId?"Edit plan":"Create a meal plan"),pbpick:"Add to Day "+((V.sheet.dayIdx||0)+1),clearplan:"Remove plan foods",
-      gymlog:(DB.gym.logs[V.sheet.ds]||{}).name||"Workout",exinfo:V.sheet.n||"Exercise",equip:"Equipment and swaps",locedit:"Edit "+curLoc().name,gympick:"Add exercise",gymroutine:(V.sheet.editingId?"Edit routine":"New routine"),
+      gymlog:(DB.gym.logs[V.sheet.ds]||{}).name||"Workout",exinfo:V.sheet.n||"Exercise",gen:"Build a workout",equip:"Equipment and swaps",locedit:"Edit "+curLoc().name,gympick:"Add exercise",gymroutine:(V.sheet.editingId?"Edit routine":"New routine"),
       gymimport:(V.sheet.stage==="reading"?"Importing":"Review program"),progview:(progById(V.sheet.pid)||{}).name||"Program",progsched:(V.sheet.s>=0?"Schedule a day":"Schedule a week")};
     h+=sheetHTML(sheetBody(),titles[V.sheet.kind]||"",sheetSizeClass());
   }
@@ -4251,6 +4416,14 @@ document.addEventListener("click",function(ev){
     if(back&&back.kind==="exinfo"&&back.n===inN)return;
     V.sheet={kind:"exinfo",n:inN,m:el.getAttribute("data-m")||"",v:el.getAttribute("data-v")||"",back:back};render();var sc=document.querySelector(".sheet .sbody,.sheet");if(sc)sc.scrollTop=0;}
   else if(act==="expref"){var pg=DB.gym;if(!pg.pref)pg.pref={};var pvv=+el.getAttribute("data-v");if(pvv)pg.pref[V.sheet.n]=pvv;else delete pg.pref[V.sheet.n];save();rerenderSheet();}
+  else if(act==="genopen"){V.sheet={kind:"gen",back:null};if(!EXDB)loadEXDB();render();}
+  else if(act==="genmin"||act==="genfocus"||act==="genvar"){var gp=genPrefs(),gv=el.getAttribute("data-v");
+    if(act==="genmin")gp.min=+gv;else if(act==="genfocus")gp.focus=gv;else gp.v=+gv;V.sheet.items=null;save();rerenderSheet();}
+  else if(act==="genshuf"){V.sheet.items=null;rerenderSheet();}
+  else if(act==="genre"){if(!genRepick(V.sheet,+el.getAttribute("data-i")))showUndo("Nothing else for that muscle at "+curLoc().name,null);rerenderSheet();}
+  else if(act==="gendel"){V.sheet.items.splice(+el.getAttribute("data-i"),1);rerenderSheet();}
+  else if(act==="genstart"){if(V.sheet.items&&V.sheet.items.length)genStart(V.sheet);}
+  else if(act==="wuoff"||act==="wuon"){DB.profile.noWarmup=act==="wuoff";V.sheet.menu=false;save();paintPlayer();}
   else if(act==="equip"){V.sheet={kind:"equip",back:V.sheet&&V.sheet.kind!=="gymlog"?V.sheet:null};render();}
   else if(act==="locpick"){DB.gym.loc=el.getAttribute("data-v");save();rerenderSheet();}
   else if(act==="locadd"){var nl={id:"l"+Date.now().toString(36),name:"Home gym",eq:LOC_PRESETS[1][1].slice()};locs().push(nl);DB.gym.loc=nl.id;save();V.sheet={kind:"locedit",back:V.sheet};render();}

@@ -806,3 +806,84 @@ test("swaps and equipment are wired in: player, programs, Library tab, planner",
   assert.ok(html.includes("sesNeeds(ex)"), "the session card says what it needs");
   assert.ok(html.includes("Photos and steps: free-exercise-db (public domain)"), "credit on the exercise page");
 });
+
+/* ---------- build a workout ---------- */
+
+function genFns(DB) {
+  const lib = html.slice(html.indexOf("/* ================= exercise library, equipment, swaps"), html.indexOf("/* ---------- equipment: where you train"));
+  const gen = html.slice(html.indexOf("/* ---------------- build a workout (the Fitbod idea)"), html.indexOf("/* rest timer between sets */"));
+  const stubs = "var EXDB=__lib;function todayStr(){return '2026-11-18';}function dateAdd(d,n){var t=new Date(d+'T12:00:00');t.setDate(t.getDate()+n);return t.toISOString().slice(0,10);}" +
+    "function logDate(k){return k.slice(0,10);}function exVideos(){return [];}function esc(s){return String(s);}function lastSets(n){return (DB.__last||{})[n]||null;}" +
+    "function recovery(){return DB.__rc||{by:{},hard:[]};}function weekMuscleSets(){return {};}function volTarget(){return {lo:10,hi:20};}" +
+    "function finishedKeys(){return Object.keys(DB.gym.logs).filter(function(k){return DB.gym.logs[k].t1;});}function e1rm(lb,r){return lb>0&&r>0?lb*(1+r/30):0;}" +
+    "function capFirst(t){return t.charAt(0).toUpperCase()+t.slice(1);}function andList(a){return a.length<2?a.join(''):a.slice(0,-1).join(', ')+' and '+a[a.length-1];}";
+  const f = new Function("__lib", "DB", stubs + lib + gen + "; libIndex(); return {genAuto,genBuild,genCtx,genOwn,genLoad,genMin,genRepick,warmupFor,canDo,curLoc,GEN_SPLITS,EXDB};");
+  return f(JSON.parse(JSON.stringify(libData)), DB);
+}
+const garage = { id: "g", name: "Garage", eq: ["bb", "rack", "bench", "adj", "db", "pullup", "band", "kb"] };
+const half = () => 0.5;
+
+test("build a workout: fills the time with lifts the place has, big ones first", () => {
+  const DB = { gym: { logs: {}, locs: [garage], loc: "g" }, profile: {} };
+  const f = genFns(DB);
+  assert.equal(f.genAuto().k, "full", "no history: full body");
+  const r = f.genBuild("full", 60, f.genCtx(1, half), true);
+  const it = r.items;
+  assert.ok(it.length >= 6 && it.length <= 8, `${it.length} exercises in an hour`);
+  assert.ok(it.every(x => f.canDo(x.x.eq, f.curLoc())), "only what the garage has");
+  assert.equal(it[0].m, "quadriceps");
+  assert.equal(it[0].n, "Barbell Squat", "a staple lift, not an oddity");
+  assert.ok(Math.abs(f.genMin(it) - 60) <= 5, `about an hour, got ${f.genMin(it)}`);
+  assert.ok(new Set(it.map(x => x.n)).size === it.length, "no repeats");
+  const short = f.genBuild("push", 30, f.genCtx(1, half), false).items, long = f.genBuild("push", 90, f.genCtx(1, half), false).items;
+  assert.ok(short.length >= 3 && short.length <= 5, `${short.length} in half an hour`);
+  assert.ok(long.length > it.length && long[0].sets === 4, "a long session: more exercises, 4 sets on the first lifts");
+  assert.ok(short.every(x => x.m === "chest" || x.m === "shoulders" || x.m === "triceps"), "push is chest, shoulders, triceps");
+  const pull = f.genBuild("pull", 45, f.genCtx(1, half), false).items.map(x => x.n);
+  assert.ok(!(pull.includes("Pullups") && pull.includes("Chin-Up")), "not the same lift twice: " + pull.join(", "));
+});
+
+test("build a workout: bodyweight place, never and more, rested muscles, your own lifts and weights", () => {
+  const DB = { gym: { logs: {}, locs: [{ id: "b", name: "Hotel", eq: [] }], loc: "b", pref: { "Pushups": -9, "Push-Up Wide": 1 } }, profile: {} };
+  let f = genFns(DB);
+  const bw = f.genBuild("push", 45, f.genCtx(1, half), false).items;
+  assert.ok(bw.length >= 2 && bw.every(x => x.x.eq.every(k => k === "bw")), "bodyweight only: " + bw.map(x => x.n).join(", "));
+  assert.ok(!bw.some(x => x.n === "Pushups"), "never means never");
+  assert.equal(bw[0].n, "Push-Up Wide", "more often moves it up");
+  /* chest still fatigued: auto leaves it out */
+  const DB2 = { gym: { logs: { "2026-11-17": { t1: 1, ex: [{ n: "Barbell Bench Press", m: "chest", sets: [{ lb: 185, reps: 8, done: true }] }] } }, locs: [garage], loc: "g" }, profile: {},
+    __rc: { by: { chest: { st: "hard" }, triceps: { st: "hard" }, shoulders: { st: "recovering" } }, hard: ["chest", "triceps"] },
+    __last: { "Barbell Bench Press": [{ lb: 185, reps: 8, done: true }, { lb: 185, reps: 6, done: true }] } };
+  f = genFns(DB2);
+  const a = f.genAuto();
+  assert.ok(!["push", "upper", "full"].includes(a.k), `fatigued chest picks ${a.k}`);
+  assert.match(a.why, /chest and triceps are still recovering/);
+  const up = f.genBuild("upper", 60, f.genCtx(1, half), true);
+  assert.ok(!up.items.some(x => x.m === "chest") && up.skipped.includes("chest"));
+  /* your program's name for a lift is used, and stands in for the library's version of it */
+  assert.ok(f.genOwn().some(x => x.n === "Barbell Bench Press"));
+  const push = f.genBuild("push", 60, f.genCtx(1, half), false).items.map(x => x.n);
+  assert.ok(push.includes("Barbell Bench Press") && !push.includes("Barbell Bench Press - Medium Grip"), push.join(", "));
+  assert.deepEqual(f.genLoad("Barbell Bench Press", 8), { lb: 185, reps: 8 }, "last time's weight for the same reps");
+  assert.equal(f.genLoad("Barbell Bench Press", 12).lb, 165, "fewer pounds for more reps (from the estimated max)");
+  assert.deepEqual(f.genLoad("Goblet Squat", 8), { lb: 0, reps: 8 }, "never done: you fill it in");
+  const sh = { k: "push", items: f.genBuild("push", 60, f.genCtx(1, half), false).items }, before = sh.items[0].n;
+  assert.ok(f.genRepick(sh, 0) && sh.items[0].n !== before && sh.items[0].m === "chest", "reshuffle one: same muscle, different lift");
+});
+
+test("warm-up: a ramp before the first big lift for a muscle, never counted", () => {
+  const DB = { gym: { logs: {} }, profile: {} };
+  const f = genFns(DB);
+  const s = lb => [{ lb, reps: 8, done: false }];
+  const log = { ex: [{ n: "Barbell Squat", m: "quadriceps", sets: s(205) }, { n: "Leg Press", m: "quadriceps", sets: s(300) },
+    { n: "Dumbbell Bench Press", m: "chest", sets: s(60) }, { n: "Barbell Curl", m: "biceps", sets: s(95) }, { n: "Romanian Deadlift", m: "hamstrings", sets: s(115) }] };
+  assert.deepEqual(f.warmupFor(log, 0), [{ lb: 45, reps: 10 }, { lb: 105, reps: 8 }, { lb: 145, reps: 5 }, { lb: 175, reps: 3 }]);
+  assert.equal(f.warmupFor(log, 1), null, "quads are already warm");
+  assert.equal(f.warmupFor(log, 2), null, "light dumbbells need no ramp");
+  assert.equal(f.warmupFor(log, 3), null, "curls aren't a big lift");
+  assert.deepEqual(f.warmupFor(log, 4), [{ lb: 45, reps: 10 }, { lb: 60, reps: 8 }, { lb: 85, reps: 4 }], "lighter: two steps");
+  DB.profile.noWarmup = true;
+  assert.equal(f.warmupFor(log, 0), null, "off from the menu");
+  for (const a of ["genopen", "genmin", "genfocus", "genvar", "genshuf", "genre", "gendel", "genstart", "wuoff", "wuon"]) assert.ok(html.includes(`act==="${a}"`), `missing ${a}`);
+  assert.ok(html.includes('k==="gen"?genBody()') && html.includes("warmupHtml(log,sh.i)"), "sheet and player wired");
+});

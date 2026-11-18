@@ -354,3 +354,17 @@ exercises. Effort is asked once per round, after its last row.
   exercises, and for each missing piece how many of them it would cover: the home gym shopping list),
   your top exercises, and the every-time swaps with Undo. Session cards list what they need.
 
+
+## Build a workout and warm-ups
+
+Train → Today → **Build a workout** makes a session on the spot, the way Fitbod does, from data the app already has. Nothing is stored until Start.
+
+- **Focus.** Auto, or Push, Pull, Legs, Upper body, Lower body, Full body. Auto scores each split by its muscles: fatigued −10, recovering −3, not trained lately +1, plus half a point per set the muscle is short of this week's low target (`volTarget`). Full body gets a small penalty so focused days win when something is rested. No history at all means full body. In Auto, muscles still fatigued are left out and named.
+- **Slots.** Each split is an ordered list of [muscle, movement] slots, big lifts first (squat, hinge, presses, rows, pull-downs), smaller ones after. Long sessions loop back over the smaller slots for a second exercise each.
+- **Picking.** Candidates are the library plus your own exercises from programs (when their equipment is known), same main muscle and movement, only what the current place has, strength exercises only, no holds or stretches. Score: done before +25 (more with use), more +20, less −25, never excluded, expert −15, a short list of staple lifts +12, photos +4, bands −8 where there's other equipment, a bodyweight squat or lunge −10 where there are weights, the same movement on the same equipment already in the workout −20. Variety (Favorites, Balanced, Mix it up) sets the random spread, how much never-done exercises are held back, and how much this week's exercises are pushed down. Your program's name for a lift stands in for the library's version of it.
+- **Time.** 30 s to set up plus sets × (45 s + rest). Big lifts: 3 × 8, 2 min rest (4 sets on the first two at 75 min and up). Others: 3 × 12 (15 for calves and abs), 75 s rest. That works out to about 4 exercises in 30 minutes and 7 or 8 in an hour.
+- **Weights.** Last time's best set, converted to the target reps through estimated 1-rep max (Epley) and rounded to plates, plus any next-time bump. Never done: blank. Reshuffle swaps one exercise for the next best that isn't already in the workout.
+
+**Warm-up sets.** Before the first big lift for a muscle in a workout, when the working weight is 65 lb or more, the player shows a ramp: the empty bar × 10 for barbell lifts, then about 50% × 8, 70% × 5, 85% × 3 (two steps under 135 lb). They're shown, not logged, so they never count toward volume or records. Off from the workout's ⋯ menu (`profile.noWarmup`).
+
+The player also shows the library's start and end photos for any exercise with no demo clip.
