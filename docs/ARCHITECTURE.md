@@ -368,3 +368,11 @@ Train → Today → **Build a workout** makes a session on the spot, the way Fit
 **Warm-up sets.** Before the first big lift for a muscle in a workout, when the working weight is 65 lb or more, the player shows a ramp: the empty bar × 10 for barbell lifts, then about 50% × 8, 70% × 5, 85% × 3 (two steps under 135 lb). They're shown, not logged, so they never count toward volume or records. Off from the workout's ⋯ menu (`profile.noWarmup`).
 
 The player also shows the library's start and end photos for any exercise with no demo clip.
+
+## Exercise drawings (Everkinetic)
+
+250 exercises have an animated line drawing from [Everkinetic](https://github.com/everkinetic/data) (CC BY-SA 4.0, by Greg Priday): 208 library exercises plus 42 Everkinetic exercises the library didn't have (ids `ek_<number>`, with Everkinetic's steps). See [CREDITS.md](../CREDITS.md).
+
+- **Build.** `scripts/build-everkinetic.mjs <checkout>` runs after `build-library.mjs`. Each exercise is drawn twice (start and end). The script drops the white background layer and puts both frames in one SVG with a CSS animation that switches every 1.2 s, like a two-frame GIF: `public/lib/ek/<number>.svg`, about 20 KB each (12 KB over the wire), 4.9 MB in all, gitignored like the photos.
+- **Matching.** The script runs the app's own `exFind` (from `index.html`) on Everkinetic's names, first with the same main muscle, then any muscle when the name is a near-exact match. Best matches claim their exercise first, one drawing per exercise. A hand-checked `OVERRIDE` table fixes the cases names get wrong (the seated military press drawing isn't the standing press; "Romanian Dead Lift" is the library's Romanian Deadlift) and leaves out second drawings of the same thing. Running it twice gives the same result.
+- **In the app.** The exercise page shows the drawing first, with Drawing and Photos to switch when there are both. The player shows a demo clip when the program has one, else the drawing, else the photos. List thumbnails prefer the photo. In the dark theme the drawing is inverted so its lines are light. "Photos and drawings with no Wi-Fi" saves both (about 30 MB) into the same `fuel-lib` cache. The exercise page credits each source.

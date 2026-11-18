@@ -519,6 +519,11 @@ button.pltt{background:none;border:0;padding:0;color:var(--ink)}
 .eqmiss{color:var(--bad);font-weight:600}
 .exanim{position:relative;aspect-ratio:3/2;border-radius:var(--r-sm);overflow:hidden;background:#fff}
 .exanim img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.ekanim{background:var(--card2,#f4f5f7)}.ekanim img{padding:6%}
+.ekthumb{background:var(--card2)}.ekthumb img{object-fit:contain;padding:3px}
+.exview{justify-content:center}.exview .chip{flex:0 0 auto}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .ekimg{filter:invert(1) brightness(.92)}}
+:root[data-theme="dark"] .ekimg{filter:invert(1) brightness(.92)}
 .exanim .b{animation:exflip 2.6s ease-in-out infinite}
 @keyframes exflip{0%,30%{opacity:0}45%,80%{opacity:1}95%,100%{opacity:0}}
 @media (prefers-reduced-motion:reduce){.exanim .b{animation:none;opacity:0}}
@@ -1424,7 +1429,7 @@ function exEquip(x){
   if(e==="dumbbell"||/dumbbell/.test(n))add("db");
   if(e==="machine"&&!has("smith")&&!has("legpress"))add("machine");
   if(!out.length&&/\bmachine\b|lever|pec deck|leg extension|leg curl|hip (ad|ab)duction|seated calf/.test(n))add("machine");
-  if(!band&&/pull-?ups?\b|chin-?ups?\b|hanging|muscle-?up|toes[- ]to[- ]bar/.test(n))add("pullup");
+  if(!band&&/pull[- ]?ups?\b|chin[- ]?ups?\b|hanging|muscle-?up|toes[- ]to[- ]bar/.test(n))add("pullup");
   if(/\bdips?\b/.test(n)&&!/bench dip/.test(n)&&!has("machine"))add("dip");
   var free=has("bb")||has("db")||has("ez")||has("kb");
   if(free&&/incline|decline/.test(n))add("adj");
@@ -1451,7 +1456,7 @@ function exPattern(x){
   if(m==="neck")return "neck";
   if(m==="forearms")return "forearm";
   if(m==="adductors"||m==="abductors"||/abduction|adduction/.test(n))return "hipiso";
-  if(/pull-?ups?\b|chin-?ups?\b|pulldown|pull-down|muscle-?up|pullover|straight[- ]arm/.test(n))return "vpull";
+  if(/pull[- ]?ups?\b|chin[- ]?ups?\b|pulldown|pull-down|muscle-?up|pullover|straight[- ]arm/.test(n))return "vpull";
   if(/face pull|rear delt|reverse fly|reverse flye|rear lateral|bent[- ]over lateral/.test(n))return "reardelt";
   if(/\brows?\b|rowing/.test(n)&&!/upright/.test(n))return "hpull";
   if(m==="shoulders"&&/upright row|raise/.test(n))return "raise";
@@ -1488,7 +1493,7 @@ function libIndex(){EXBYN={};(EXDB||[]).forEach(function(x){x.eq=exEquip(x);x.p=
 var EX_WORDS={db:"dumbbell",dbs:"dumbbell",bb:"barbell",kb:"kettlebell",ohp:"overhead press",rdl:"romanian deadlift",sldl:"stiff legged deadlift",
   ez:"ez",flat:"bench",deads:"deadlift",deadlifts:"deadlift",stiffs:"stiff",pulldowns:"pulldown",flys:"fly",flyes:"fly",curls:"curl",raises:"raise",rows:"row",presses:"press",extensions:"extension",squats:"squat",lunges:"lunge"};
 var EX_PHRASE=[[/\bpull[- ]?ups?\b/g,"pullup"],[/\bchin[- ]?ups?\b/g,"chinup"],[/\bpush[- ]?ups?\b/g,"pushup"],[/\bsit[- ]?ups?\b/g,"situp"],
-  [/\bstep[- ]?ups?\b/g,"stepup"],[/\bskull ?crushers?\b/g,"skullcrusher"],[/\bpull[- ]?downs?\b/g,"pulldown"],[/\bpush[- ]?downs?\b/g,"pushdown"],
+  [/\bstep[- ]?ups?\b/g,"stepup"],[/\bdead ?lifts?\b/g,"deadlift"],[/\bskull ?crushers?\b/g,"skullcrusher"],[/\bpull[- ]?downs?\b/g,"pulldown"],[/\bpush[- ]?downs?\b/g,"pushdown"],
   [/\boverhead press\b/g,"shoulder press"],[/\bsmith machine\b/g,"smith"],[/\bpec deck\b/g,"butterfly"],[/\bt[- ]bar\b/g,"tbar"],[/\be-?z\b/g,"ez"]];
 var EX_EQW=/^(band|cable|machine|smith|kettlebell|ball|lever|leverage|sled|landmine|tbar|suspension|suspended|ez|barbell|dumbbell)$/;
 function exWords(n){var t=String(n||"").toLowerCase();EX_PHRASE.forEach(function(r){t=t.replace(r[0],r[1]);});
@@ -1539,9 +1544,15 @@ function swapCands(ex,all,max){
     out.push({x:x,s:s,ok:ok,used:use[x.n]||0,swapped:sw[x.n]||0});});
   out.sort(function(a,b){return b.s-a.s||(a.x.n<b.x.n?-1:1);});
   return out.slice(0,max||15);}
-function exThumb(x){return x&&x.ph?'<span class="vmini"><img src="/lib/'+x.id+'/0.jpg" alt="" loading="lazy" onerror="this.remove()"></span>':'<span class="vmini lbl">'+IC("gym")+'</span>';}
+function exThumb(x){return x&&x.ph?'<span class="vmini"><img src="/lib/'+x.id+'/0.jpg" alt="" loading="lazy" onerror="this.remove()"></span>':
+  x&&x.ek?'<span class="vmini ekthumb"><img class="ekimg" src="/lib/ek/'+x.ek+'.svg" alt="" loading="lazy" onerror="this.remove()"></span>':'<span class="vmini lbl">'+IC("gym")+'</span>';}
 /* the two photos as a loop: start, end, start */
-function exAnim(x){return x&&x.ph?'<div class="exanim"><img src="/lib/'+x.id+'/0.jpg" alt="'+esc(x.n)+', start"><img class="b" src="/lib/'+x.id+'/1.jpg" alt="'+esc(x.n)+', end"></div>':'';}
+/* Everkinetic's line drawing (start and end positions, switching like a GIF) when there is one, else the photos */
+function exAnim(x,photo){if(!x)return '';
+  if(x.ek&&!(photo&&x.ph))return '<div class="exanim ekanim"><img class="ekimg" src="/lib/ek/'+x.ek+'.svg" alt="'+esc(x.n)+', drawn moving from start to end"></div>';
+  return x.ph?'<div class="exanim"><img src="/lib/'+x.id+'/0.jpg" alt="'+esc(x.n)+', start"><img class="b" src="/lib/'+x.id+'/1.jpg" alt="'+esc(x.n)+', end"></div>':'';}
+function exCredit(x){if(!x)return '';var ek=String(x.id).indexOf("ek_")===0;
+  return (ek?'Drawing and steps: Everkinetic by Greg Priday (CC BY-SA 4.0).':(x.ek?'Drawing: Everkinetic by Greg Priday (CC BY-SA 4.0). ':'')+(x.ph||x.st?(x.ph?'Photos':'')+(x.ph&&x.st?' and steps':x.st?'Steps':'')+': free-exercise-db (public domain).':''))+' Muscle drawing: MuscleMap (MIT).';}
 /* demo clips from your programs, by step name, for library pages that match one */
 function progVideoFor(n){var hit=null,want=String(n||"").toLowerCase();
   (DB.gym.programs||[]).forEach(function(p){(p.weeks||[]).forEach(function(w){(w.sessions||[]).forEach(function(se){(se.ex||[]).forEach(function(e){
@@ -1592,17 +1603,17 @@ function libraryView(){
   return h+'<div id="liblist">'+libRows()+'</div>';}
 /* every library photo on the phone at once (they're also kept one by one as you look) */
 var LIB_CACHE="fuel-lib",LDL={saved:null,busy:false,done:0,total:0,err:0};
-function libPhotoPaths(){var out=[];(EXDB||[]).forEach(function(x){if(x.ph)out.push("/lib/"+x.id+"/0.jpg","/lib/"+x.id+"/1.jpg");});return out;}
+function libPhotoPaths(){var out=[];(EXDB||[]).forEach(function(x){if(x.ph)out.push("/lib/"+x.id+"/0.jpg","/lib/"+x.id+"/1.jpg");if(x.ek)out.push("/lib/ek/"+x.ek+".svg");});return out;}
 function libCountSaved(){if(!("caches" in window)){LDL.saved=-1;return;}LDL.saved=-1;
   caches.open(LIB_CACHE).then(function(c){return c.keys();}).then(function(k){LDL.saved=k.length;if(V.tab==="gym")render();}).catch(function(){});}
 function libPhotosCard(){
   if(!("caches" in window))return "";
   var all=libPhotoPaths().length;if(LDL.saved==null){libCountSaved();return "";}
-  if(LDL.busy)return '<div class="card"><div class="mealhd"><span class="mt">Saving photos</span><span class="mcal num">'+LDL.done+' of '+LDL.total+'</span></div>'+
+  if(LDL.busy)return '<div class="card"><div class="mealhd"><span class="mt">Saving photos and drawings</span><span class="mcal num">'+LDL.done+' of '+LDL.total+'</span></div>'+
     '<div class="calbar" style="height:6px;margin-top:12px"><i style="width:'+Math.round(LDL.done/Math.max(1,LDL.total)*100)+'%;background:linear-gradient(90deg,var(--ring1),var(--ring2))"></i></div></div>';
   if(LDL.saved<0||LDL.saved>=all)return "";
-  return '<button class="card instbar" data-act="libsave">'+IC("download")+'<span class="grow"><b>Photos with no Wi-Fi</b><br><span class="ls num">'+
-    (LDL.saved?Math.floor(LDL.saved/2)+' of '+all/2+' saved. ':'')+'Save all '+all/2+', about 25 MB</span></span>'+IC("caretr")+'</button>';}
+  return '<button class="card instbar" data-act="libsave">'+IC("download")+'<span class="grow"><b>Photos and drawings with no Wi-Fi</b><br><span class="ls num">'+
+    (LDL.saved?Math.min(99,Math.floor(LDL.saved/all*100))+'% saved. ':'')+'Save them all, about 30 MB</span></span>'+IC("caretr")+'</button>';}
 function libSave(){
   if(LDL.busy||!("caches" in window))return;
   try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();}catch(e){}
@@ -1614,14 +1625,15 @@ function libSave(){
         .then(function(){LDL.done++;if(Date.now()-last>600){last=Date.now();if(V.tab==="gym")render();}return one();});}
     return Promise.all([one(),one(),one(),one(),one(),one()]);});})
   .catch(function(){LDL.err=LDL.total;}).then(function(){LDL.busy=false;LDL.saved=null;render();
-    showUndo(LDL.err?"Saved all but "+LDL.err+" photos":"Exercise photos saved. The library works with no connection",null);});}
+    showUndo(LDL.err?"Saved all but "+LDL.err+" files":"Exercise photos and drawings saved. The library works with no connection",null);});}
 /* ---------- one exercise: how it moves, what it works, how to do it ---------- */
 function exInfoBody(){
   var sh=V.sheet;if(!EXDB){loadEXDB();return '<div class="empty">Loading…</div>';}
   var x=EXBYN[String(sh.n).toLowerCase()]||exFind(sh.n,sh.m),name=sh.n,m=x?x.m:(sh.m||"other"),loc=curLoc();
   var sec=x?(x.s||[]):helperMuscles(name,m),eq=x?x.eq:exEquip({n:name}),pt=x?x.p:exPattern({n:name,m:m}),vid=sh.v?{v:sh.v}:progVideoFor(name),h='';
   if(vid)h+='<div class="plvid exvid"><video src="/media/ex/'+vid.v+'.mp4" poster="/media/ex/'+vid.v+'.jpg" autoplay muted loop playsinline preload="auto"></video></div>';
-  else h+=exAnim(x);
+  else{h+=exAnim(x,sh.photo);
+    if(x&&x.ek&&x.ph)h+='<div class="chips exview">'+[["0","Drawing"],["1","Photos"]].map(function(o){return '<button class="chip'+((sh.photo?"1":"0")===o[0]?" on":"")+'" data-act="exview" data-v="'+o[0]+'">'+o[1]+'</button>';}).join("")+'</div>';}
   if(x&&x.n!==name)h+='<div class="fnote">Closest match in the library: '+esc(x.n)+'.</div>';
   h+='<div class="chips exchips">'+[capFirst(m),PATN[pt]].concat(x?[["Beginner","Intermediate","Expert"][x.lv],x.mc==="c"?"Compound":x.mc==="i"?"Isolation":""]:[])
     .filter(Boolean).map(function(t){return '<span class="mtag">'+esc(t)+'</span>';}).join("")+'</div>';
@@ -1646,7 +1658,7 @@ function exInfoBody(){
   if(sim.length){h+='<div class="card"><div class="mealhd"><span class="mt">Similar exercises</span></div><div class="wklist">';
     sim.forEach(function(c){h+='<button class="wkrow exrow" data-act="exinfo" data-n="'+esc(c.x.n)+'">'+exThumb(c.x)+'<span class="grow"><span class="ln">'+esc(c.x.n)+'</span><br><span class="ls">'+
       eqText(c.x.eq,loc)+'</span></span>'+IC("caretr")+'</button>';});h+='</div></div>';}
-  if(x)h+='<div class="fnote">Photos and steps: free-exercise-db (public domain). Muscle drawing: MuscleMap (MIT).</div>';
+  if(x)h+='<div class="fnote">'+esc(exCredit(x))+'</div>';
   return h;}
 /* ---------- swap an exercise in the workout ---------- */
 function swapBody(log,ex){
@@ -1769,7 +1781,7 @@ function genScore(x,o){var s=0,u=o.use[x.n]||0,pr=o.pref[x.n];
   if(u)s+=25+Math.min(15,u/3);else s-=[12,0,-4][o.v];
   if(pr===1)s+=20;else if(pr===-1)s-=25;
   if(x.lv===2)s-=15;else if(x.lv===1)s-=2;
-  if(x.ph||(x.lib&&x.lib.ph))s+=4;
+  if(x.ph||x.ek||(x.lib&&(x.lib.ph||x.lib.ek)))s+=4;
   if(GEN_STAPLE[x.n])s+=12;
   /* bands are the fallback, not the first choice, when the place has more */
   if(x.eq.indexOf("band")>=0&&o.loc.eq.some(function(k){return k!=="band";}))s-=8;
@@ -2705,7 +2717,7 @@ function plHead(log,ro){
 }
 function plMedia(log){
   var sh=V.sheet,ex=!sh.list&&!sh.sum&&!sh.swap&&log.ex[sh.i],vids=ex?exVideos(ex):[],x=vids[Math.min(sh.vi||0,vids.length-1)];
-  if(!x){var lx=ex&&exLibFor(ex);return lx&&lx.ph?'<div class="plph">'+exAnim(lx)+'</div>':'';}
+  if(!x){var lx=ex&&exLibFor(ex);return lx&&(lx.ph||lx.ek)?'<div class="plph">'+exAnim(lx)+'</div>':'';}
   return '<div class="plvid"><video src="/media/ex/'+x.v+'.mp4" poster="/media/ex/'+x.v+'.jpg" autoplay muted loop playsinline preload="auto"></video>'+
     '<button class="plexp" data-act="vid" data-v="'+x.v+'" data-n="'+esc(x.n)+'" aria-label="Open the video larger, with controls">'+IC("expand")+'</button>'+
     '<div class="vmsg" hidden>This video isn’t saved on this phone. Connect to the internet, or save videos for offline from the Workout tab.</div></div>';
@@ -4415,6 +4427,7 @@ document.addEventListener("click",function(ev){
   else if(act==="exinfo"){var inN=el.getAttribute("data-n"),back=V.sheet;
     if(back&&back.kind==="exinfo"&&back.n===inN)return;
     V.sheet={kind:"exinfo",n:inN,m:el.getAttribute("data-m")||"",v:el.getAttribute("data-v")||"",back:back};render();var sc=document.querySelector(".sheet .sbody,.sheet");if(sc)sc.scrollTop=0;}
+  else if(act==="exview"){V.sheet.photo=el.getAttribute("data-v")==="1";rerenderSheet();}
   else if(act==="expref"){var pg=DB.gym;if(!pg.pref)pg.pref={};var pvv=+el.getAttribute("data-v");if(pvv)pg.pref[V.sheet.n]=pvv;else delete pg.pref[V.sheet.n];save();rerenderSheet();}
   else if(act==="genopen"){V.sheet={kind:"gen",back:null};if(!EXDB)loadEXDB();render();}
   else if(act==="genmin"||act==="genfocus"||act==="genvar"){var gp=genPrefs(),gv=el.getAttribute("data-v");

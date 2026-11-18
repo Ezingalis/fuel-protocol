@@ -804,7 +804,7 @@ test("swaps and equipment are wired in: player, programs, Library tab, planner",
   assert.ok(html.includes('["history","History"],["library","Library"]'), "Library is a Train view");
   assert.ok(html.includes("var subs=DB.gym.subs||{};") && html.includes("e.n=subs[e0.n];e.was=e0.n;"), "programs use swap-every-time");
   assert.ok(html.includes("sesNeeds(ex)"), "the session card says what it needs");
-  assert.ok(html.includes("Photos and steps: free-exercise-db (public domain)"), "credit on the exercise page");
+  assert.ok(html.includes("free-exercise-db (public domain)") && html.includes("Everkinetic by Greg Priday (CC BY-SA 4.0)"), "credit on the exercise page");
 });
 
 /* ---------- build a workout ---------- */
@@ -886,4 +886,31 @@ test("warm-up: a ramp before the first big lift for a muscle, never counted", ()
   assert.equal(f.warmupFor(log, 0), null, "off from the menu");
   for (const a of ["genopen", "genmin", "genfocus", "genvar", "genshuf", "genre", "gendel", "genstart", "wuoff", "wuon"]) assert.ok(html.includes(`act==="${a}"`), `missing ${a}`);
   assert.ok(html.includes('k==="gen"?genBody()') && html.includes("warmupHtml(log,sh.i)"), "sheet and player wired");
+});
+
+test("drawings: Everkinetic line art on 200+ exercises, new ones added, credited, kept out of git", () => {
+  const ex = JSON.parse(read("public/exercises.json"));
+  const drawn = ex.filter(x => x.ek), added = ex.filter(x => String(x.id).startsWith("ek_"));
+  assert.ok(drawn.length >= 240, `${drawn.length} with a drawing`);
+  assert.ok(added.length >= 30 && added.every(x => x.ek && x.st && x.st.length && x.m && x.m !== "other"), "added exercises have steps and a muscle");
+  assert.equal(new Set(ex.map(x => x.n.toLowerCase())).size, ex.length, "no duplicate names");
+  assert.equal(new Set(drawn.map(x => x.ek)).size, drawn.length, "one drawing per exercise");
+  const by = n => ex.find(x => x.n === n);
+  assert.ok(by("Barbell Bench Press - Medium Grip").ek && by("Romanian Deadlift").ek && by("Side Lateral Raise").ek, "the staples are drawn");
+  assert.equal(by("Standing Military Press").ek, undefined, "the seated drawing isn't on the standing press");
+  assert.ok(by("Seated Barbell Military Press").ek);
+  assert.ok(!ex.some(x => /dead lift/i.test(x.n)), "Romanian Dead Lift is the library's Romanian Deadlift");
+  /* the drawings themselves: ink only, both frames, switching on a loop */
+  const svgPath = join(root, "public/lib/ek", by("Barbell Squat").ek + ".svg");
+  if (existsSync(svgPath)) {
+    const svg = readFileSync(svgPath, "utf8");
+    assert.ok(svg.includes('class="a"') && svg.includes('class="b"') && svg.includes("@keyframes"), "two frames, animated");
+    assert.ok(!/fill="#fff"/i.test(svg), "no white background, so it works on a dark theme");
+  }
+  assert.ok(gitignore.includes("public/lib/"), "drawings stay out of git like the photos");
+  const credits = read("CREDITS.md");
+  assert.ok(/Everkinetic/.test(credits) && /CC BY-SA 4\.0/.test(credits) && /free-exercise-db/.test(credits) && /MuscleMap/.test(credits));
+  const f = libFns({ gym: { logs: {} } });
+  assert.ok(f.exEquip({ n: "Wide Grip Chin Up" }).includes("pullup"), "a chin up needs a bar");
+  assert.ok(html.includes('"/lib/ek/"+x.ek+".svg"') && html.includes("libPhotoPaths") && html.includes('act==="exview"'));
 });
